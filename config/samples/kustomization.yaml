@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- kubeovn.io_v1_configuration.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
