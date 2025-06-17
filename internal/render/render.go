@@ -30,7 +30,9 @@ func GenerateObjects(templates []string, config *ovnoperatorv1.Configuration, ob
 	var returnedObjects []client.Object
 
 	// patch version supplied by the controller
-	config.Spec.Global.Images.KubeOVNImage.Tag = version
+	if len(config.Spec.Global.Images.KubeOVNImage.Tag) == 0 {
+		config.Spec.Global.Images.KubeOVNImage.Tag = version
+	}
 
 	valsObj, err := generateMap(config)
 	if err != nil {
