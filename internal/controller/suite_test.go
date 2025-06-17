@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -160,7 +159,6 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	time.Sleep(2 * time.Minute)
 	By("tearing down the test environment")
 	err := envtest.UninstallCRDs(cfg, crdInstallOptions)
 	Expect(err).NotTo(HaveOccurred())

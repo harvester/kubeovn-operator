@@ -179,9 +179,28 @@ var _ = Describe("Configuration Controller", func() {
 					return nil
 				}, "30s", "5s").Should(BeNil())
 			})
-			// delete a master node to validate cleanup
-
-			// add a new node to ensure ovn db is reconcilled
+			// validate node finalizers exist
+			By("checking node finalizers exist", func() {
+				Eventually(func() error {
+					nodeList := corev1.NodeList{}
+					err := k8sClient.List(ctx, &nodeList)
+					if err != nil {
+						return err
+					}
+					exists := true
+					for _, v := range nodeList.Items {
+						node := &v
+						if !controllerutil.ContainsFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer) {
+							testSuiteLogger.WithValues("node", node.GetName()).Info("KubeOVNNodeFinalizer not found")
+							exists = exists && false
+						}
+					}
+					if exists {
+						return nil
+					}
+					return fmt.Errorf("waiting for finalizer to be set on all nodes")
+				}, "120s", "5s").ShouldNot(HaveOccurred())
+			})
 		})
 	})
 })
