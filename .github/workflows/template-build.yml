@@ -26,8 +26,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Run dapper
-        run: make ci
+      - name: Run build and test
+        run: make
 
       - name: Read some Secrets
         uses: rancher-eio/read-vault-secrets@main
