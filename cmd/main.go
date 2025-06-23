@@ -51,7 +51,7 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-	Version  = "v1.13.12"
+	Version  = "v1.13.13"
 )
 
 func init() {
