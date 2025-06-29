@@ -26,7 +26,6 @@ spec:
         - --health-probe-bind-address=:8081
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         - --namespace={{ .Release.Namespace }}
-        - --version={{ .Chart.AppVersion }}
         command:
         - /manager
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
