@@ -7,7 +7,6 @@ godebug default=go1.23
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/go-logr/logr v1.4.2
-	github.com/iancoleman/strcase v0.3.0
 	github.com/k3d-io/k3d/v5 v5.8.3
 	github.com/onsi/ginkgo/v2 v2.22.1
 	github.com/onsi/gomega v1.36.2
