@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -93,8 +94,14 @@ var _ = BeforeSuite(func() {
 		Scheme:             scheme,
 		Paths:              []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfPathMissing: true,
+		PollInterval:       5 * time.Second,
+		MaxTime:            30 * time.Second,
+		CleanUpAfterUse:    true,
 	}
 	_, err = envtest.InstallCRDs(cfg, crdInstallOptions)
+	if err != nil {
+		testSuiteLogger.Error(err, "setup error")
+	}
 	Expect(err).NotTo(HaveOccurred())
 	// +kubebuilder:scaffold:scheme
 
