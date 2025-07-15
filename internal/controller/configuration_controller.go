@@ -160,6 +160,16 @@ func (r *ConfigurationReconciler) applyObject(ctx context.Context, config *kubeo
 		return fmt.Errorf("error looking up fake namespaced object: %v", err)
 	}
 
+	// fetch webhook secret which will be used for validating webhook
+	webhookSecret := &corev1.Secret{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: kubeovniov1.KubeOVNOperatorWebhookCertSecret, Namespace: r.Namespace}, webhookSecret)
+	if err != nil {
+		return fmt.Errorf("error fetching secret %s: %w", kubeovniov1.KubeOVNOperatorWebhookCertSecret, err)
+	}
+	caCert, ok := webhookSecret.Data["ca.crt"]
+	if !ok {
+		return fmt.Errorf("no key found for ca.crt in secret %v", kubeovniov1.KubeOVNOperatorWebhookCertSecret)
+	}
 	for objectType, objectList := range templates.OrderedObjectList {
 		r.Log.WithValues("objectType", objectType).Info("processing object type")
 		// chceck if objectType is a clusterscoped object so we can defined correct ownership
@@ -167,7 +177,7 @@ func (r *ConfigurationReconciler) applyObject(ctx context.Context, config *kubeo
 		if err != nil {
 			return fmt.Errorf("unable to identify if objecttype %s is namedspaced: %v", objectType.GetObjectKind(), err)
 		}
-		objs, err := render.GenerateObjects(objectList, config, objectType, r.RestConfig, r.Version)
+		objs, err := render.GenerateObjects(objectList, config, objectType, r.RestConfig, r.Version, string(caCert))
 		if err != nil {
 			return fmt.Errorf("error during object generation for type %s: %v", objectType.GetObjectKind().GroupVersionKind(), err)
 		}
@@ -339,7 +349,7 @@ func (r *ConfigurationReconciler) reconcileClusterScopedReference(ctx context.Co
 func (r *ConfigurationReconciler) deleteClusterScopedReference(ctx context.Context, config *kubeovniov1.Configuration) error {
 	// enusre CRD objects are deleted first, this ensures that they are GC'd by the controllers
 	// as some of them may have finalizers which may need some work to be done by the ovn controllers
-	crdObjs, err := render.GenerateObjects(templates.CRDList, config, &apiextensionsv1.CustomResourceDefinition{}, r.RestConfig, r.Version)
+	crdObjs, err := render.GenerateObjects(templates.CRDList, config, &apiextensionsv1.CustomResourceDefinition{}, r.RestConfig, r.Version, "") // no caCert is needed as it does not affect generated crd objects
 	if err != nil {
 		return fmt.Errorf("error rendering CRDs during configuration cleanup: %v", err)
 	}
