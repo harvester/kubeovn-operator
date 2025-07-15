@@ -132,5 +132,21 @@ spec:
     ovn-sb-leader: "true"
   sessionAffinity: None`
 
-	ServicesList = []string{kube_ovn_controller_service, kube_ovn_monitor_service, ovn_nb_service, ovn_northd_service, kube_ovn_cni_service, kube_ovn_pinger_service}
+	kubeovn_webhook_service = `kind: Service
+apiVersion: v1
+metadata:
+  name: kube-ovn-webhook
+  namespace: {{ .Values.namespace }}
+spec:
+  ports:
+    - name: kube-ovn-webhook
+      protocol: TCP
+      port: 443
+      targetPort: 8443
+  type: ClusterIP
+  selector:
+    app: kube-ovn-webhook
+  sessionAffinity: None
+  `
+	ServicesList = []string{kube_ovn_controller_service, kube_ovn_monitor_service, ovn_nb_service, ovn_northd_service, kube_ovn_cni_service, kube_ovn_pinger_service, ovn_sb_service, kubeovn_webhook_service}
 )

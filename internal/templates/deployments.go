@@ -707,5 +707,90 @@ spec:
             path: {{ .Values.logConfig.logDir }}/kube-ovn
 `
 
-	DeploymentList = []string{ovn_central_deployment, kube_ovn_controller_deployment, ovn_ic_controller_deployment, kube_ovn_monitor_deployment}
+	kubeovn_webhook_deployment = `kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: kube-ovn-webhook
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-ovn-webhook
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 100%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: kube-ovn-webhook
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: kube-ovn-webhook
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: ovn
+      hostNetwork: true
+      containers:
+        - name: kube-ovn-webhook
+          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command:
+            - /kube-ovn/kube-ovn-webhook
+          args:
+            - --port=8443
+            - --health-probe-port=8080
+            - --v=3
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+          ports:
+          - containerPort: 8443
+            name: https
+            protocol: TCP
+          - containerPort: 8080
+            name: health-probe
+            protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: webhook-certs
+      nodeSelector:
+        kubernetes.io/os: "linux"`
+
+	DeploymentList = []string{ovn_central_deployment, kube_ovn_controller_deployment, ovn_ic_controller_deployment, kube_ovn_monitor_deployment, kubeovn_webhook_deployment}
 )
