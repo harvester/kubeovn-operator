@@ -1,6 +1,7 @@
 package templates
 
 import (
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -19,4 +20,5 @@ var OrderedObjectList = map[client.Object][]string{
 	&appsv1.Deployment{}:         DeploymentList,
 	&appsv1.DaemonSet{}:          DaemonsetList,
 	&corev1.Service{}:            ServicesList,
+	&admissionregistrationv1.ValidatingWebhookConfiguration{}: ValidatingWebhookConfigurationList,
 }

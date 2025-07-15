@@ -369,6 +369,7 @@ const (
 	LeaderFound                      = "LeaderFound"
 	LeaderNotFound                   = "LeaderNotFound"
 	DBHealth                         = "DBHealth"
+	KubeOVNOperatorWebhookCertSecret = "webhook-certs"
 )
 
 var (

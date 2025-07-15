@@ -5,12 +5,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"sigs.k8s.io/yaml"
-
 	ovnoperatorv1 "github.com/harvester/kubeovn-operator/api/v1"
 	"github.com/harvester/kubeovn-operator/internal/templates"
 	sourcetemplate "github.com/harvester/kubeovn-operator/internal/templates"
+	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 func generateConfigObject() (*ovnoperatorv1.Configuration, error) {
@@ -28,7 +27,7 @@ func Test_ObjectRendering(t *testing.T) {
 	c, err := generateConfigObject()
 	assert.NoError(err, "expected no error while generating config object")
 	for objectType, objectList := range sourcetemplate.OrderedObjectList {
-		returnedObjects, err := GenerateObjects(objectList, c, objectType, nil, "v1.14.0")
+		returnedObjects, err := GenerateObjects(objectList, c, objectType, nil, "v1.14.0", "caCertString")
 		assert.NoError(err, "expected no error while generating object", objectType)
 		for _, object := range returnedObjects {
 			assert.NotEmpty(object.GetName())
