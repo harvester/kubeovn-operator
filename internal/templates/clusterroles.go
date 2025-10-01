@@ -177,6 +177,7 @@ rules:
     verbs:
       - get
       - list
+      - watch
   - apiGroups:
       - "policy.networking.k8s.io"
     resources:
@@ -262,9 +263,14 @@ rules:
       - ""
     resources:
       - services
-      - endpoints
     verbs:
       - get
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
   - apiGroups:
       - apps
     resources:
@@ -299,6 +305,7 @@ rules:
       - nodes
       - nodes/status
       - pods
+      - services
     verbs:
       - get
       - list
