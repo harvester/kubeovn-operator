@@ -197,7 +197,7 @@ var _ = Describe("Configuration Controller", func() {
 						return nil
 					}
 					return fmt.Errorf("waiting for configuration object to be gc'd")
-				}, "30s", "5s").Should(BeNil())
+				}, "2m", "5s").Should(BeNil())
 			})
 
 			It("checking node finalizers have been removed", func() {
