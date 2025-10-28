@@ -177,7 +177,7 @@ func podList(ctx context.Context, label string, k8sClient client.Client, namespa
 func (r *NodeReconciler) executeRemoteScriptOnLeader(ctx context.Context, script string, label string, node string) error {
 	result, err := executeOVNCentralCommand(ctx, script, label, r.Client, r.RestConfig, r.Namespace)
 	if err != nil {
-		return fmt.Errorf("Error during southbound cleanup command execution %s: %v", string(result), err)
+		return fmt.Errorf("error during southbound cleanup command execution %s: %v", string(result), err)
 	}
 	r.Log.WithValues("node", node).Info(string(result))
 	return nil

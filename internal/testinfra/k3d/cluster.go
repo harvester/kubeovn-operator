@@ -26,7 +26,7 @@ const (
 	defaultClusterName  = "kubeovn-test"
 	serverCount         = 3
 	defaultNetworkName  = "k3d-kubeovn"
-	defaultClusterToken = "k3d-kubeovn"
+	defaultClusterToken = "k3d-kubeovn" //nolint:gosec
 )
 
 func (c *K3dCluster) CreateCluster(ctx context.Context) error {

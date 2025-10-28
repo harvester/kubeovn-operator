@@ -1,0 +1,41 @@
+version: 2
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - gosec
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - prealloc
+  formatters:
+    enable:
+      - gofmt
+  settings:
+    gosec:
+      # https://github.com/securego/gosec#available-rules
+      config:
+        G306: "0644" # Poor file permissions used when writing to a new file
+  exclude-files:
+    - /zz_generated_
+    - _generated
+  exclude-dirs:
+    - generated
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - staticcheck
+        text: "QF1001" # could apply De Morgan's law
+      - linters:
+          - staticcheck
+        text: "QF1008:" # could remove embedded field from selector (staticcheck)
+run:
+  timeout: 5m
+  tests: true
