@@ -29,7 +29,6 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -83,7 +82,7 @@ var _ = Describe("Configuration Controller", func() {
 				Expect(err).Should(BeNil())
 				typedConfig = types.NamespacedName{Name: config.GetName(), Namespace: config.GetNamespace()}
 				err = k8sClient.Get(ctx, typedConfig, configuration)
-				if err != nil && errors.IsNotFound(err) {
+				if err != nil && apierrors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, config)).To(Succeed())
 				}
 			})
@@ -118,7 +117,7 @@ var _ = Describe("Configuration Controller", func() {
 				}, "30s", "5s").Should(BeNil())
 			})
 
-			It("checking status has been reconcilled to deployed", func() {
+			It("checking status has been reconciled to deployed", func() {
 				Eventually(func() error {
 					resource := &kubeovniov1.Configuration{}
 					err := k8sClient.Get(ctx, typedConfig, resource)
@@ -227,6 +226,7 @@ var _ = Describe("Configuration Controller", func() {
 })
 
 func generateWebhookSecret() (*corev1.Secret, error) {
+	//nolint:gosec
 	var webhookSecretTemplate = `{{- $webhookSvcAltNames := list (printf "kubeovn-operator-webhook-service.%s.svc" "kube-system") (printf "kubeovn-operator-controller-manager-metrics-service.%s.svc" "kube-system") (printf "kube-ovn-webhook.%s.svc" "kube-system")}}
 {{- $ca := genCA "kubeovn-operator-ca" 3650 }}
 {{- $cert := genSignedCert (printf "kubeovn-operator-webhook-service.%s" "kube-system" )  nil $webhookSvcAltNames 365 $ca }}

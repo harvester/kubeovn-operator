@@ -1,5 +1,6 @@
 package templates
 
+//nolint:gosec
 var (
 	kube_ovn_tls_secret = `{{- if .Values.networking.enableSSL }}
 {{- $cn := "ovn" -}}
