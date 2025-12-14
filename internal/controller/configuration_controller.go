@@ -444,6 +444,10 @@ func (r *ConfigurationReconciler) ensureCRDObjectCleanup(ctx context.Context, ob
 			}
 			dynObjects, err := resourceInterface.List(ctx, metav1.ListOptions{})
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					r.Log.WithValues("name", crd.Name).Info("no objects found for crd type")
+					continue
+				}
 				return fmt.Errorf("error checking getting list of objects for type %s: %v", obj.GetName(), err)
 			}
 
