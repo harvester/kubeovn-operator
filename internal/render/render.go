@@ -164,6 +164,8 @@ func InitialiseNewObject(object client.Object) client.Object {
 		return &rbacv1.RoleBinding{}
 	case *rbacv1.ClusterRole:
 		return &rbacv1.ClusterRole{}
+	case *rbacv1.Role:
+		return &rbacv1.Role{}
 	case *rbacv1.ClusterRoleBinding:
 		return &rbacv1.ClusterRoleBinding{}
 	case *appsv1.DaemonSet:

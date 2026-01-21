@@ -59,6 +59,9 @@ spec:
                     type: string
                   mountLocalBinDir:
                     type: boolean
+                  nonPrimaryCNI:
+                    default: true
+                    type: boolean
                 type: object
               components:
                 default: {}
@@ -131,6 +134,15 @@ spec:
                   u2oInterconnection:
                     default: false
                     type: boolean
+                  enableDNSNameResolver:
+                    default: false
+                    type: boolean
+                  enableOVNLBPreferLocal:
+                    default: false
+                    type: boolean
+                  npEnforcement:
+                    default: standard
+                    type: string
                 type: object
               debug:
                 default: {}
@@ -600,6 +612,8 @@ spec:
                         default: ovn-vlan
                         type: string
                     type: object
+                  skipConnTrackDstCIDRs:
+                    type: string
                 type: object
               openVSwitchDir:
                 default: /etc/origin/openvswitch

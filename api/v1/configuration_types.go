@@ -167,6 +167,8 @@ type NetworkingSpec struct {
 	OvnNorthdNThreads int `json:"ovnNorthdNThreads,omitempty"`
 	// +kubebuilder:default:=false
 	EnableCompact *bool `json:"enableCompact,omitempty"`
+	// +kubebuilder:default:=""
+	SkipConnTrackDstCIDRs string `json:"skipConnTrackDstCIDRs,omitempty"`
 }
 
 type VlanSpec struct {
@@ -228,6 +230,12 @@ type ComponentSpec struct {
 	OVSDBInactivityTimeout int `json:"OVSDBInactivityTimeout,omitempty"`
 	// +kubebuilder:default:=true
 	EnableLiveMigrationOptimize *bool `json:"enableLiveMigrationOptimize,omitempty"`
+	// +kubebuilder:default:="standard"
+	NPEnforcement string `json:"npEnforcement,omitempty"`
+	// +kubebuilder:default:=false
+	EnableDNSNameResolver *bool `json:"enableDNSNameResolver,omitempty"`
+	// +kubebuilder:default:=false
+	EnableOVNLBPreferLocal *bool `json:"enableOVNLBPreferLocal,omitempty"`
 }
 
 type NetworkStackSpec struct {
@@ -275,6 +283,8 @@ type CNIConfSpec struct {
 	// +kubebuilder:default:="/usr/local/bin"
 	LocalBinDir      string `json:"localBinDir,omitempty"`
 	MountLocalBinDir *bool  `json:"mountLocalBinDir,omitempty"`
+	// +kubebuilder:default:=true
+	NonPrimaryCNI *bool `json:"nonPrimaryCNI,omitempty"`
 }
 type KubeletConfigSpec struct {
 	// +kubebuilder:default:="/var/lib/kubelet"
