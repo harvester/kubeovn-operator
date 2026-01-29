@@ -1,0 +1,12 @@
+{{- if .Values.enableConfiguration }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeovn-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeovn-operator.labels" . | nindent 4 }}
+data:
+  configuration.yaml: |-
+{{ toYaml .Values.configurationSpec | indent 4 }}
+{{- end }}
