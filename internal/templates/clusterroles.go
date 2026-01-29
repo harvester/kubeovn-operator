@@ -50,6 +50,8 @@ rules:
       - switch-lb-rules/status
       - vpc-dnses
       - vpc-dnses/status
+      - dnsnameresolvers
+      - dnsnameresolvers/status
       - qos-policies
       - qos-policies/status
     verbs:
@@ -86,6 +88,8 @@ rules:
       - network-attachment-definitions
     verbs:
       - get
+      - list
+      - watch
   - apiGroups:
       - ""
       - networking.k8s.io
@@ -183,6 +187,7 @@ rules:
     resources:
       - adminnetworkpolicies
       - baselineadminnetworkpolicies
+      - clusternetworkpolicies
     verbs:
       - get
       - list
@@ -355,13 +360,7 @@ rules:
       - "get"
       - "list"
       - "watch"
-      - "delete"
-  - apiGroups:
-      - ""
-    resources:
-      - "secrets"
-    verbs:
-      - "get"`
+      - "delete"`
 
 	system_kube_ovn_app_clusterrole = `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
