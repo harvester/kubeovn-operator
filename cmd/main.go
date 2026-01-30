@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	kubeovniov1 "github.com/harvester/kubeovn-operator/api/v1"
+	"github.com/harvester/kubeovn-operator/internal/bootstrap"
 	"github.com/harvester/kubeovn-operator/internal/controller"
 	webhookkubeovnv1 "github.com/harvester/kubeovn-operator/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
@@ -281,6 +282,22 @@ func main() {
 		}
 	}
 	// +kubebuilder:scaffold:builder
+
+	setupLog.Info("adding configuration bootstrapper",
+		"configuration", bootstrap.DefaultConfigurationName,
+		"namespace", namespace,
+		"configmap", bootstrap.BootstrapConfigMapName)
+
+	bootstrapper := &bootstrap.ConfigurationBootstrapper{
+		Client:    mgr.GetClient(),
+		Namespace: namespace,
+		Log:       setupLog.WithName("bootstrap"),
+	}
+
+	if err := mgr.Add(bootstrapper); err != nil {
+		setupLog.Error(err, "unable to add configuration bootstrapper")
+		os.Exit(1)
+	}
 
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")
