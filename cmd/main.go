@@ -80,7 +80,6 @@ func main() {
 	var namespace string
 	var debug bool
 	var healthCheckInterval int
-	var defaultConfigPath string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -102,7 +101,6 @@ func main() {
 	flag.StringVar(&version, "version", DefaultVersion, "Version passed to kubeovn image tag in generated resources")
 	flag.BoolVar(&debug, "debug", false, "Enable debug logging")
 	flag.IntVar(&healthCheckInterval, "healthCheckInterval", 300, "Healthcheck interval for check OVN DB health")
-	flag.StringVar(&defaultConfigPath, "default-config-path", bootstrap.DefaultConfigMountPath, "Path where the default configuration ConfigMap is mounted")
 
 	opts := zap.Options{
 		Level: zapcore.InfoLevel,
@@ -296,16 +294,15 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	// Add configuration bootstrapper to load default Configuration after manager starts
 	setupLog.Info("adding configuration bootstrapper",
 		"configuration", bootstrap.DefaultConfigurationName,
-		"namespace", bootstrap.DefaultConfigurationNamespace,
-		"configPath", defaultConfigPath)
+		"namespace", namespace,
+		"configmap", bootstrap.BootstrapConfigMapName)
 
 	bootstrapper := &bootstrap.ConfigurationBootstrapper{
-		Client:          mgr.GetClient(),
-		ConfigMountPath: defaultConfigPath,
-		Log:             setupLog.WithName("bootstrap"),
+		Client:    mgr.GetClient(),
+		Namespace: namespace,
+		Log:       setupLog.WithName("bootstrap"),
 	}
 
 	if err := mgr.Add(bootstrapper); err != nil {

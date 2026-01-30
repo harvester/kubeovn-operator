@@ -2,13 +2,12 @@ package bootstrap
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,9 +19,12 @@ import (
 	kubeovniov1 "github.com/harvester/kubeovn-operator/api/v1"
 )
 
+const testNamespace = "test-namespace"
+
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = kubeovniov1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
 	return scheme
 }
 
@@ -42,15 +44,15 @@ func TestLoadAndApplyDefaultConfiguration(t *testing.T) {
 	tests := []struct {
 		name                string
 		existingConfig      bool
-		configFileContent   *string // nil = no file created, pointer to string = file content
-		expectConfigCreated bool
+		configMapContent    *string // nil = no ConfigMap created, pointer to string = ConfigMap data content
+		expectConfigPresent bool
 		validateSpec        func(t *testing.T, spec kubeovniov1.ConfigurationSpec)
 	}{
 		{
 			name:                "configuration already exists without configmap",
 			existingConfig:      true,
-			configFileContent:   nil,
-			expectConfigCreated: true, // already exists, not created by bootstrapper
+			configMapContent:    nil,
+			expectConfigPresent: true, // already exists, not created by bootstrapper
 			validateSpec: func(t *testing.T, spec kubeovniov1.ConfigurationSpec) {
 				// Verify the original config was not modified
 				assert.Equal(t, existingSpecLabel, spec.MasterNodesLabel)
@@ -59,30 +61,30 @@ func TestLoadAndApplyDefaultConfiguration(t *testing.T) {
 		{
 			name:                "configuration already exists with configmap",
 			existingConfig:      true,
-			configFileContent:   ptr.To("masterNodesLabel: new-label-from-configmap"),
-			expectConfigCreated: true, // already exists, not created by bootstrapper
+			configMapContent:    ptr.To("masterNodesLabel: new-label-from-configmap"),
+			expectConfigPresent: true, // already exists, not created by bootstrapper
 			validateSpec: func(t *testing.T, spec kubeovniov1.ConfigurationSpec) {
 				// Verify the original config was not overwritten by configmap content
 				assert.Equal(t, existingSpecLabel, spec.MasterNodesLabel)
 			},
 		},
 		{
-			name:                "config file not found",
+			name:                "configmap not found",
 			existingConfig:      false,
-			configFileContent:   nil,
-			expectConfigCreated: false,
+			configMapContent:    nil,
+			expectConfigPresent: false,
 		},
 		{
-			name:                "invalid YAML",
+			name:                "invalid YAML in configmap",
 			existingConfig:      false,
-			configFileContent:   ptr.To("not a valid yaml: [[["),
-			expectConfigCreated: false,
+			configMapContent:    ptr.To("not a valid yaml: [[["),
+			expectConfigPresent: false,
 		},
 		{
-			name:                "valid config",
+			name:                "valid config from configmap",
 			existingConfig:      false,
-			configFileContent:   ptr.To(validSpecYAML),
-			expectConfigCreated: true,
+			configMapContent:    ptr.To(validSpecYAML),
+			expectConfigPresent: true,
 			validateSpec: func(t *testing.T, spec kubeovniov1.ConfigurationSpec) {
 				assert.Equal(t, "node-role.kubernetes.io/control-plane=true", spec.MasterNodesLabel)
 			},
@@ -99,7 +101,7 @@ func TestLoadAndApplyDefaultConfiguration(t *testing.T) {
 				existingConfig := &kubeovniov1.Configuration{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      DefaultConfigurationName,
-						Namespace: DefaultConfigurationNamespace,
+						Namespace: testNamespace,
 					},
 					Spec: kubeovniov1.ConfigurationSpec{
 						MasterNodesLabel: existingSpecLabel,
@@ -108,20 +110,26 @@ func TestLoadAndApplyDefaultConfiguration(t *testing.T) {
 				clientBuilder = clientBuilder.WithObjects(existingConfig)
 			}
 
+			// Setup ConfigMap if needed
+			if tt.configMapContent != nil {
+				configMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      BootstrapConfigMapName,
+						Namespace: testNamespace,
+					},
+					Data: map[string]string{
+						ConfigMapDataKey: *tt.configMapContent,
+					},
+				}
+				clientBuilder = clientBuilder.WithObjects(configMap)
+			}
+
 			fakeClient := clientBuilder.Build()
 
-			// Setup config file if needed
-			configMountPath := t.TempDir()
-			if tt.configFileContent != nil {
-				err := os.WriteFile(filepath.Join(configMountPath, ConfigurationFileName), []byte(*tt.configFileContent), 0644)
-				require.NoError(t, err)
-			}
-			// If configFileContent is nil, the directory exists but the file doesn't
-
 			bootstrapper := &ConfigurationBootstrapper{
-				Client:          fakeClient,
-				ConfigMountPath: configMountPath,
-				Log:             newTestLogger(),
+				Client:    fakeClient,
+				Namespace: testNamespace,
+				Log:       newTestLogger(),
 			}
 
 			// Execute
@@ -133,10 +141,10 @@ func TestLoadAndApplyDefaultConfiguration(t *testing.T) {
 			config := &kubeovniov1.Configuration{}
 			err = fakeClient.Get(ctx, types.NamespacedName{
 				Name:      DefaultConfigurationName,
-				Namespace: DefaultConfigurationNamespace,
+				Namespace: testNamespace,
 			}, config)
 
-			if tt.expectConfigCreated {
+			if tt.expectConfigPresent {
 				require.NoError(t, err)
 				if tt.validateSpec != nil {
 					tt.validateSpec(t, config.Spec)
@@ -184,7 +192,7 @@ func TestCreateConfigurationWithRetry(t *testing.T) {
 				existingConfig := &kubeovniov1.Configuration{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      DefaultConfigurationName,
-						Namespace: DefaultConfigurationNamespace,
+						Namespace: testNamespace,
 					},
 				}
 				clientBuilder = clientBuilder.WithObjects(existingConfig)
@@ -203,15 +211,15 @@ func TestCreateConfigurationWithRetry(t *testing.T) {
 			}
 
 			bootstrapper := &ConfigurationBootstrapper{
-				Client:          testClient,
-				ConfigMountPath: "/tmp",
-				Log:             newTestLogger(),
+				Client:    testClient,
+				Namespace: testNamespace,
+				Log:       newTestLogger(),
 			}
 
 			config := &kubeovniov1.Configuration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      DefaultConfigurationName,
-					Namespace: DefaultConfigurationNamespace,
+					Namespace: testNamespace,
 				},
 			}
 
