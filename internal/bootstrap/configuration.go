@@ -3,11 +3,10 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -18,17 +17,16 @@ import (
 )
 
 const (
-	DefaultConfigMountPath        = "/etc/kubeovn-operator/default-config"
-	ConfigurationFileName         = "configuration.yaml"
-	DefaultConfigurationName      = "kubeovn"
-	DefaultConfigurationNamespace = "kube-system"
+	BootstrapConfigMapName   = "kubeovn-configuration-bootstrap"
+	ConfigMapDataKey         = "configuration.yaml"
+	DefaultConfigurationName = "kubeovn"
 )
 
-// ConfigurationBootstrapper loads and applies the default Configuration from a mounted ConfigMap.
+// ConfigurationBootstrapper loads and applies the default Configuration from a ConfigMap via Kubernetes API.
 type ConfigurationBootstrapper struct {
-	Client          client.Client
-	ConfigMountPath string
-	Log             logr.Logger
+	Client    client.Client
+	Namespace string
+	Log       logr.Logger
 }
 
 // Start implements manager.Runnable. It is called when the manager starts.
@@ -52,19 +50,19 @@ func (b *ConfigurationBootstrapper) NeedLeaderElection() bool {
 	return true
 }
 
-// loadAndApplyDefaultConfiguration reads the Configuration spec from the mounted ConfigMap
+// loadAndApplyDefaultConfiguration reads the Configuration spec from a ConfigMap via Kubernetes API
 // and creates the Configuration CR if it does not already exist.
 func (b *ConfigurationBootstrapper) loadAndApplyDefaultConfiguration(ctx context.Context) error {
 	existingConfig := &kubeovniov1.Configuration{}
 	err := b.Client.Get(ctx, types.NamespacedName{
 		Name:      DefaultConfigurationName,
-		Namespace: DefaultConfigurationNamespace,
+		Namespace: b.Namespace,
 	}, existingConfig)
 
 	if err == nil {
 		b.Log.Info("Configuration already exists, skipping default configuration loading",
 			"configuration", DefaultConfigurationName,
-			"namespace", DefaultConfigurationNamespace)
+			"namespace", b.Namespace)
 		return nil
 	}
 
@@ -72,32 +70,54 @@ func (b *ConfigurationBootstrapper) loadAndApplyDefaultConfiguration(ctx context
 		return fmt.Errorf("error checking for existing Configuration: %w", err)
 	}
 
-	configFilePath := filepath.Join(b.ConfigMountPath, ConfigurationFileName)
-	b.Log.Info("Configuration not found, loading spec from mounted ConfigMap",
+	b.Log.Info("Configuration not found, loading spec from bootstrap ConfigMap",
 		"configuration", DefaultConfigurationName,
-		"namespace", DefaultConfigurationNamespace,
-		"path", configFilePath)
+		"namespace", b.Namespace,
+		"configmap", BootstrapConfigMapName)
 
-	specData, err := os.ReadFile(configFilePath)
-	if err != nil {
-		b.Log.Error(err, "failed to read configuration spec file",
-			"path", configFilePath)
+	configMap := &corev1.ConfigMap{}
+	err = b.Client.Get(ctx, types.NamespacedName{
+		Name:      BootstrapConfigMapName,
+		Namespace: b.Namespace,
+	}, configMap)
+
+	if apierrors.IsNotFound(err) {
+		b.Log.Info("bootstrap ConfigMap not found, skipping default configuration loading",
+			"configmap", BootstrapConfigMapName,
+			"namespace", b.Namespace)
 		return nil
 	}
+
+	if err != nil {
+		b.Log.Error(err, "failed to get bootstrap ConfigMap",
+			"configmap", BootstrapConfigMapName,
+			"namespace", b.Namespace)
+		return nil
+	}
+
+	specData, ok := configMap.Data[ConfigMapDataKey]
+	if !ok {
+		b.Log.Error(nil, "configuration.yaml key not found in ConfigMap",
+			"configmap", BootstrapConfigMapName,
+			"namespace", b.Namespace)
+		return nil
+	}
+
 	spec := &kubeovniov1.ConfigurationSpec{}
-	if err := yaml.Unmarshal(specData, spec); err != nil {
-		b.Log.Error(err, "failed to parse Configuration spec YAML",
-			"path", configFilePath)
+	if err := yaml.Unmarshal([]byte(specData), spec); err != nil {
+		b.Log.Error(err, "failed to parse Configuration spec YAML from ConfigMap",
+			"configmap", BootstrapConfigMapName,
+			"namespace", b.Namespace)
 		return nil
 	}
 
 	config := &kubeovniov1.Configuration{}
 	config.Name = DefaultConfigurationName
-	config.Namespace = DefaultConfigurationNamespace
+	config.Namespace = b.Namespace
 	config.Spec = *spec
 
-	b.Log.Info("creating default Configuration from mounted ConfigMap",
-		"path", configFilePath,
+	b.Log.Info("creating default Configuration from bootstrap ConfigMap",
+		"configmap", BootstrapConfigMapName,
 		"configuration", config.Name,
 		"namespace", config.Namespace)
 	err = b.createConfigurationWithRetry(ctx, config)
