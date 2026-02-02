@@ -209,7 +209,6 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "1d231218.my.domain",
@@ -274,12 +273,24 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Node")
 	}
 
+	webhookMgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "",
+		},
+		HealthProbeBindAddress: "",
+		LeaderElection:         false,
+		WebhookServer:          webhookServer,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
 	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err = webhookkubeovnv1.SetupConfigurationWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "Configuration")
-			os.Exit(1)
-		}
+	if err = webhookkubeovnv1.SetupConfigurationWebhookWithManager(webhookMgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Configuration")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
@@ -309,7 +320,7 @@ func main() {
 
 	if webhookCertWatcher != nil {
 		setupLog.Info("Adding webhook certificate watcher to manager")
-		if err := mgr.Add(webhookCertWatcher); err != nil {
+		if err := webhookMgr.Add(webhookCertWatcher); err != nil {
 			setupLog.Error(err, "unable to add webhook certificate watcher to manager")
 			os.Exit(1)
 		}
@@ -324,9 +335,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	go func() {
+		setupLog.Info("starting manager")
+		if err := webhookMgr.Start(ctx); err != nil {
+			setupLog.Error(err, "problem running webhook manager instance")
+			os.Exit(1)
+		}
+	}()
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "problem running controller manager instance")
 		os.Exit(1)
 	}
+
 }
