@@ -30,8 +30,12 @@ spec:
       - operator: Exists
       priorityClassName: system-node-critical
       serviceAccountName: ovn-ovs
+      automountServiceAccountToken: true
       hostNetwork: true
       hostPID: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: openvswitch
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}-dpdk
@@ -53,7 +57,7 @@ spec:
               value: "{{- .Values.networking.tunnelType }}"
             - name: DPDK_TUNNEL_IFACE
               value: "{{- .Values.networking.dpdkTunnelInterface }}"
-            - name: KUBE_NODE_NAME
+            - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
@@ -193,8 +197,12 @@ spec:
           operator: Exists
       priorityClassName: system-node-critical
       serviceAccountName: kube-ovn-cni
+      automountServiceAccountToken: true
       hostNetwork: true
       hostPID: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
       - name: hostpath-init
         image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -202,11 +210,9 @@ spec:
         command:
           - sh
           - -xec
-          - {{ if not .Values.disableModulesManagement -}}
+          - |
+            chmod +t /usr/local/sbin
             iptables -V
-            {{- else -}}
-            echo "nothing to do"
-            {{- end }}
         securityContext:
           allowPrivilegeEscalation: true
           capabilities:
@@ -234,6 +240,11 @@ spec:
           - --cni-conf-dir={{ .Values.cniConf.cniConfigDir }}
           - --cni-conf-file={{ .Values.cniConf.cniConfFile }}
           - --cni-conf-name={{- .Values.cniConf.cniConfigPriority -}}-kube-ovn.conflist
+        env:
+          - name: POD_IPS
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIPs
         securityContext:
           runAsUser: 0
           privileged: true
@@ -306,7 +317,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
-          - name: KUBE_NODE_NAME
+          - name: NODE_NAME
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
@@ -482,8 +493,12 @@ spec:
           operator: Exists
       priorityClassName: system-node-critical
       serviceAccountName: ovn-ovs
+      automountServiceAccountToken: true
       hostNetwork: true
       hostPID: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: hostpath-init
           {{- if .values.dpdk }}
@@ -496,6 +511,7 @@ spec:
             - sh
             - -xec
             - |
+              chmod +t /usr/local/sbin
               chown -R nobody: /var/run/ovn /var/log/ovn /etc/openvswitch /var/run/openvswitch /var/log/openvswitch
               {{- if not .Values.disableModulesManagement }}
               iptables -V
@@ -568,7 +584,7 @@ spec:
               value: "{{- .Values.components.hardwareOffload }}"
             - name: TUNNEL_TYPE
               value: "{{- .Values.networking.tunnelType }}"
-            - name: KUBE_NODE_NAME
+            - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
@@ -728,7 +744,11 @@ spec:
         - key: CriticalAddonsOnly
           operator: Exists
       serviceAccountName: kube-ovn-app
-      hostPID: true
+      automountServiceAccountToken: true
+      hostPID: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: hostpath-init
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -769,7 +789,6 @@ spec:
           {{- else if eq .Values.networking.netStack "ipv6" -}}
           {{ .Values.ipv6.pingerExternalDomain }}
           {{- end }}
-          - --ds-namespace={{ .Values.namespace }}
           - --logtostderr=false
           - --alsologtostderr=true
           - --log_file=/var/log/kube-ovn/kube-ovn-pinger.log
@@ -798,6 +817,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: NODE_NAME
               valueFrom:
                 fieldRef:

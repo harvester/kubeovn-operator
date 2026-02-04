@@ -26,6 +26,9 @@ spec:
         - jsonPath: .spec.subnet
           name: Subnet
           type: string
+        - jsonPath: .spec.corefile
+          name: Corefile
+          type: string
       name: v1
       served: true
       storage: true
@@ -39,35 +42,53 @@ spec:
               type: object
               properties:
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name for the DNS service. This field is immutable after creation.
                 subnet:
                   type: string
+                  description: Subnet name for the DNS service. This field is immutable after creation.
                 replicas:
                   type: integer
+                  description: Number of DNS server replicas (1-3)
+                  format: int32
                   minimum: 1
                   maximum: 3
+                corefile:
+                  type: string
+                  description: CoreDNS corefile configuration
+                  default: vpc-dns-corefile
             status:
               type: object
               properties:
                 active:
                   type: boolean
+                  description: Whether the VPC DNS service is active
                 conditions:
                   type: array
+                  description: Conditions represent the latest state of the VPC DNS
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of the condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
-                        type: string`
+                        type: string
+                        description: Last time the condition transitioned from one status to another`
+
 	switch_lb_rules_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -119,14 +140,20 @@ spec:
                     properties:
                       name:
                         type: string
+                        description: Port name
                       port:
                         type: integer
+                        description: Service port number (1-65535)
+                        format: int32
                         minimum: 1
                         maximum: 65535
                       protocol:
                         type: string
+                        description: Protocol (TCP or UDP)
                       targetPort:
                         type: integer
+                        description: Target port number (1-65535)
+                        format: int32
                         minimum: 1
                         maximum: 65535
                     type: object
@@ -144,8 +171,10 @@ spec:
               properties:
                 ports:
                   type: string
+                  description: Configured ports
                 service:
-                  type: string`
+                  type: string
+                  description: Associated service name`
 
 	vpc_nat_gateways_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -188,12 +217,15 @@ spec:
                   items:
                     type: string
                   type: array
+                  description: External subnets configured for the NAT gateway
                 selector:
                   type: array
                   items:
                     type: string
+                  description: Pod selector configured for the NAT gateway
                 qosPolicy:
                   type: string
+                  description: QoS policy applied to the NAT gateway
                 tolerations:
                   type: array
                   items:
@@ -206,6 +238,8 @@ spec:
                         enum:
                           - Equal
                           - Exists
+                          - Lt
+                          - Gt
                       value:
                         type: string
                       effect:
@@ -215,6 +249,7 @@ spec:
                           - NoSchedule
                           - PreferNoSchedule
                       tolerationSeconds:
+                        format: int64
                         type: integer
                 affinity:
                   properties:
@@ -260,6 +295,7 @@ spec:
                                 type: object
                               weight:
                                 type: integer
+                                format: int32
                                 minimum: 1
                                 maximum: 100
                             required:
@@ -324,8 +360,6 @@ spec:
                                           properties:
                                             key:
                                               type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
                                             operator:
                                               type: string
                                             values:
@@ -337,6 +371,9 @@ spec:
                                             - operator
                                           type: object
                                         type: array
+                                        x-kubernetes-list-type: map
+                                        x-kubernetes-list-map-keys:
+                                          - key
                                       matchLabels:
                                         additionalProperties:
                                           type: string
@@ -353,6 +390,7 @@ spec:
                                 type: object
                               weight:
                                 type: integer
+                                format: int32
                                 minimum: 1
                                 maximum: 100
                             required:
@@ -370,8 +408,6 @@ spec:
                                       properties:
                                         key:
                                           type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
                                         operator:
                                           type: string
                                         values:
@@ -383,6 +419,9 @@ spec:
                                         - operator
                                       type: object
                                     type: array
+                                    x-kubernetes-list-type: map
+                                    x-kubernetes-list-map-keys:
+                                      - key
                                   matchLabels:
                                     additionalProperties:
                                       type: string
@@ -413,8 +452,6 @@ spec:
                                           properties:
                                             key:
                                               type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
                                             operator:
                                               type: string
                                             values:
@@ -426,6 +463,9 @@ spec:
                                             - operator
                                           type: object
                                         type: array
+                                        x-kubernetes-list-type: map
+                                        x-kubernetes-list-map-keys:
+                                          - key
                                       matchLabels:
                                         additionalProperties:
                                           type: string
@@ -442,6 +482,7 @@ spec:
                                 type: object
                               weight:
                                 type: integer
+                                format: int32
                                 minimum: 1
                                 maximum: 100
                             required:
@@ -459,8 +500,6 @@ spec:
                                       properties:
                                         key:
                                           type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
                                         operator:
                                           type: string
                                         values:
@@ -472,6 +511,9 @@ spec:
                                         - operator
                                       type: object
                                     type: array
+                                    x-kubernetes-list-type: map
+                                    x-kubernetes-list-map-keys:
+                                      - key
                                   matchLabels:
                                     additionalProperties:
                                       type: string
@@ -494,45 +536,80 @@ spec:
               properties:
                 lanIp:
                   type: string
+                  description: LAN IP address for the NAT gateway. This field is immutable after creation.
                 subnet:
                   type: string
+                  description: Subnet name for the NAT gateway. This field is immutable after creation.
                 externalSubnets:
                   items:
                     type: string
                   type: array
+                  description: External subnets accessible through the NAT gateway
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name for the NAT gateway. This field is immutable after creation.
                 selector:
                   type: array
                   items:
                     type: string
+                  description: Pod selector for the NAT gateway
                 qosPolicy:
                   type: string
+                  description: QoS policy name to apply to the NAT gateway
+                noDefaultEIP:
+                  type: boolean
+                  description: Disable default EIP assignment
                 bgpSpeaker:
                   type: object
+                  description: BGP speaker configuration
                   properties:
                     enabled:
                       type: boolean
+                      description: Enable BGP speaker
                     asn:
                       type: integer
+                      format: uint32
+                      description: Local AS number
                     remoteAsn:
                       type: integer
+                      format: uint32
+                      description: Remote AS number
                     neighbors:
                       type: array
                       items:
                         type: string
+                      description: BGP neighbor IP addresses
                     holdTime:
                       type: string
+                      description: BGP hold time
                     routerId:
                       type: string
+                      description: BGP router ID
                     password:
                       type: string
+                      description: BGP authentication password
                     enableGracefulRestart:
                       type: boolean
+                      description: Enable BGP graceful restart
                     extraArgs:
                       type: array
                       items:
                         type: string
+                      description: Extra BGP arguments
+                routes:
+                  type: array
+                  description: Static routes for the NAT gateway
+                  items:
+                    type: object
+                    properties:
+                      cidr:
+                        type: string
+                        format: cidr
+                        description: Destination CIDR for the route
+                      nextHopIP:
+                        type: string
+                        description: Next hop IP address
                 tolerations:
                   type: array
                   items:
@@ -545,6 +622,8 @@ spec:
                         enum:
                           - Equal
                           - Exists
+                          - Lt
+                          - Gt
                       value:
                         type: string
                       effect:
@@ -554,6 +633,7 @@ spec:
                           - NoSchedule
                           - PreferNoSchedule
                       tolerationSeconds:
+                        format: int64
                         type: integer
                 affinity:
                   properties:
@@ -599,6 +679,7 @@ spec:
                                 type: object
                               weight:
                                 type: integer
+                                format: int32
                                 minimum: 1
                                 maximum: 100
                             required:
@@ -663,8 +744,6 @@ spec:
                                           properties:
                                             key:
                                               type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
                                             operator:
                                               type: string
                                             values:
@@ -676,6 +755,9 @@ spec:
                                             - operator
                                           type: object
                                         type: array
+                                        x-kubernetes-list-type: map
+                                        x-kubernetes-list-map-keys:
+                                          - key
                                       matchLabels:
                                         additionalProperties:
                                           type: string
@@ -692,6 +774,7 @@ spec:
                                 type: object
                               weight:
                                 type: integer
+                                format: int32
                                 minimum: 1
                                 maximum: 100
                             required:
@@ -709,8 +792,6 @@ spec:
                                       properties:
                                         key:
                                           type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
                                         operator:
                                           type: string
                                         values:
@@ -722,6 +803,9 @@ spec:
                                         - operator
                                       type: object
                                     type: array
+                                    x-kubernetes-list-type: map
+                                    x-kubernetes-list-map-keys:
+                                      - key
                                   matchLabels:
                                     additionalProperties:
                                       type: string
@@ -752,8 +836,6 @@ spec:
                                           properties:
                                             key:
                                               type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
                                             operator:
                                               type: string
                                             values:
@@ -765,6 +847,9 @@ spec:
                                             - operator
                                           type: object
                                         type: array
+                                        x-kubernetes-list-type: map
+                                        x-kubernetes-list-map-keys:
+                                          - key
                                       matchLabels:
                                         additionalProperties:
                                           type: string
@@ -781,6 +866,7 @@ spec:
                                 type: object
                               weight:
                                 type: integer
+                                format: int32
                                 minimum: 1
                                 maximum: 100
                             required:
@@ -798,8 +884,6 @@ spec:
                                       properties:
                                         key:
                                           type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
                                         operator:
                                           type: string
                                         values:
@@ -811,6 +895,9 @@ spec:
                                         - operator
                                       type: object
                                     type: array
+                                    x-kubernetes-list-type: map
+                                    x-kubernetes-list-map-keys:
+                                      - key
                                   matchLabels:
                                     additionalProperties:
                                       type: string
@@ -828,7 +915,6 @@ spec:
                           type: array
                       type: object
                   type: object`
-
 	vpc_egress_gateways_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -899,10 +985,13 @@ spec:
               properties:
                 replicas:
                   type: integer
+                  format: int32
                   minimum: 0
                   maximum: 10
+                  description: Number of egress gateway replicas
                 labelSelector:
                   type: string
+                  description: Label selector for the egress gateway
                 conditions:
                   items:
                     properties:
@@ -916,6 +1005,7 @@ spec:
                         maxLength: 32768
                         type: string
                       observedGeneration:
+                        format: int64
                         minimum: 0
                         type: integer
                       reason:
@@ -942,6 +1032,7 @@ spec:
                       - type
                     type: object
                   type: array
+                  description: Conditions represent the latest available observations of the egress gateway's current state
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
@@ -949,12 +1040,15 @@ spec:
                   items:
                     type: string
                   type: array
+                  description: Internal IP addresses assigned to the egress gateway
                 externalIPs:
                   items:
                     type: string
                   type: array
+                  description: External IP addresses assigned to the egress gateway
                 phase:
                   type: string
+                  description: Current phase of the egress gateway (Pending, Processing, or Completed)
                   default: Pending
                   enum:
                     - Pending
@@ -962,9 +1056,11 @@ spec:
                     - Completed
                 ready:
                   type: boolean
+                  description: Indicates whether the egress gateway is ready
                   default: false
                 workload:
                   type: object
+                  description: Workload information for the egress gateway
                   properties:
                     apiVersion:
                       type: string
@@ -996,11 +1092,14 @@ spec:
               properties:
                 replicas:
                   type: integer
+                  format: int32
                   default: 1
                   minimum: 0
                   maximum: 10
+                  description: Number of egress gateway replicas
                 prefix:
                   type: string
+                  description: Name prefix for egress gateway pods. This field is immutable after creation.
                   anyOf:
                     - pattern: ^$
                     - pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*[-\.]?$
@@ -1008,11 +1107,15 @@ spec:
                     - rule: "self == oldSelf"
                       message: "This field is immutable."
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name for the egress gateway. This field is immutable after creation.
                 internalSubnet:
                   type: string
+                  description: Internal subnet name for the egress gateway. This field is immutable after creation.
                 externalSubnet:
                   type: string
+                  description: External subnet name for the egress gateway. This field is immutable after creation and is required.
                 internalIPs:
                   items:
                     type: string
@@ -1023,6 +1126,7 @@ spec:
                       - pattern: ^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|:))),(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])$
                   type: array
                   x-kubernetes-list-type: set
+                  description: Internal IP addresses for the egress gateway
                 externalIPs:
                   items:
                     type: string
@@ -1033,31 +1137,38 @@ spec:
                       - pattern: ^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|:))),(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])$
                   type: array
                   x-kubernetes-list-type: set
+                  description: External IP addresses for the egress gateway
                 image:
                   type: string
+                  description: Container image for the egress gateway
                 bfd:
                   type: object
+                  description: BFD (Bidirectional Forwarding Detection) configuration
                   properties:
                     enabled:
                       type: boolean
                       default: false
                     minRX:
                       type: integer
+                      format: int32
                       default: 1000
                       minimum: 1
                       maximum: 3600000
                     minTX:
                       type: integer
+                      format: int32
                       default: 1000
                       minimum: 1
                       maximum: 3600000
                     multiplier:
                       type: integer
+                      format: int32
                       default: 3
                       minimum: 1
                       maximum: 3600000
                 selectors:
                   type: array
+                  description: Selectors for pods to use this egress gateway
                   items:
                     type: object
                     properties:
@@ -1115,6 +1226,7 @@ spec:
                             message: 'Each pod selector MUST have at least one matchLabels or matchExpressions'
                 policies:
                   type: array
+                  description: Egress policies for the gateway
                   items:
                     type: object
                     properties:
@@ -1141,12 +1253,14 @@ spec:
                         message: 'Each policy MUST have at least one ipBlock or subnet'
                 trafficPolicy:
                   type: string
+                  description: Traffic policy for the egress gateway (Local or Cluster)
                   enum:
                     - Local
                     - Cluster
                   default: Cluster
                 nodeSelector:
                   type: array
+                  description: Node selector for egress gateway placement
                   items:
                     type: object
                     properties:
@@ -1201,8 +1315,56 @@ spec:
                                 type: string
                           required:
                             - key
-                            - operator`
-
+                            - operator
+                tolerations:
+                  description: optional tolerations applied to the workload pods
+                  items:
+                    description: |-
+                      The pod this Toleration is attached to tolerates any taint that matches
+                      the triple <key,value,effect> using the matching operator <operator>.
+                    properties:
+                      effect:
+                        description: |-
+                          Effect indicates the taint effect to match. Empty means match all taint effects.
+                          When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                        type: string
+                        enum:
+                          - NoSchedule
+                          - PreferNoSchedule
+                          - NoExecute
+                      key:
+                        description: |-
+                          Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                          If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                        type: string
+                      operator:
+                        description: |-
+                          Operator represents a key's relationship to the value.
+                          Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                          Exists is equivalent to wildcard for value, so that a pod can
+                          tolerate all taints of a particular category.
+                          Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                        type: string
+                        enum:
+                          - Exists
+                          - Equal
+                          - Lt
+                          - Gt
+                      tolerationSeconds:
+                        description: |-
+                          TolerationSeconds represents the period of time the toleration (which must be
+                          of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                          it is not set, which means tolerate the taint forever (do not evict). Zero and
+                          negative values will be treated as 0 (evict immediately) by the system.
+                        format: int64
+                        type: integer
+                      value:
+                        description: |-
+                          Value is the taint value the toleration matches to.
+                          If the operator is Exists, the value should be empty, otherwise just a regular string.
+                        type: string
+                    type: object
+                  type: array`
 	iptables_eips_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1248,47 +1410,64 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the EIP is ready
                 ip:
                   type: string
+                  description: IP address assigned to the EIP
                 nat:
                   type: string
+                  description: NAT configuration status
                 redo:
                   type: string
+                  description: Redo operation status
                 qosPolicy:
                   type: string
+                  description: QoS policy applied to the EIP
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the EIP's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 v4ip:
                   type: string
+                  description: IPv4 address for the EIP
                 v6ip:
                   type: string
+                  description: IPv6 address for the EIP
                 macAddress:
                   type: string
+                  description: MAC address for the EIP
                 natGwDp:
                   type: string
+                  description: NAT gateway datapath where the EIP is assigned
                 qosPolicy:
                   type: string
+                  description: QoS policy name to apply to the EIP
                 externalSubnet:
-                  type: string`
-
+                  type: string
+                  description: External subnet name. This field is immutable after creation.`
 	iptables_fip_rules_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1337,41 +1516,55 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the FIP rule is ready
                 v4ip:
                   type: string
+                  description: IPv4 address of the EIP
                 v6ip:
                   type: string
+                  description: IPv6 address of the EIP
                 natGwDp:
                   type: string
+                  description: NAT gateway datapath where the FIP is configured
                 redo:
                   type: string
+                  description: Redo operation status
                 internalIp:
                   type: string
+                  description: Internal IP address mapped to the FIP
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the FIP rule's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 eip:
                   type: string
+                  description: EIP name to use for floating IP
                 internalIp:
-                  type: string`
-
+                  type: string
+                  description: Internal IP address to map to the floating IP`
 	iptables_dnat_rules_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1429,53 +1622,75 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the DNAT rule is ready
                 v4ip:
                   type: string
+                  description: IPv4 address of the EIP
                 v6ip:
                   type: string
+                  description: IPv6 address of the EIP
                 natGwDp:
                   type: string
+                  description: NAT gateway datapath where the DNAT rule is configured
                 redo:
                   type: string
+                  description: Redo operation status
                 protocol:
+                  description: Network protocol (IPv4, IPv6, or Dual). Immutable after creation.
                   type: string
+                  description: Protocol type of the DNAT rule
                 internalIp:
                   type: string
+                  description: Internal IP address configured in the DNAT rule
                 internalPort:
                   type: string
+                  description: Internal port configured in the DNAT rule
                 externalPort:
                   type: string
+                  description: External port configured in the DNAT rule
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the DNAT rule's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 eip:
                   type: string
+                  description: EIP name for DNAT rule
                 externalPort:
                   type: string
+                  description: External port number
                 protocol:
+                  description: Network protocol (IPv4, IPv6, or Dual). Immutable after creation.
                   type: string
+                  description: Protocol type (TCP or UDP)
                 internalIp:
                   type: string
+                  description: Internal IP address to forward traffic to
                 internalPort:
-                  type: string`
-
+                  type: string
+                  description: Internal port number to forward traffic to`
 	iptables_snat_rules_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1524,40 +1739,55 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the SNAT rule is ready
                 v4ip:
                   type: string
+                  description: IPv4 address of the EIP
                 v6ip:
                   type: string
+                  description: IPv6 address of the EIP
                 natGwDp:
                   type: string
+                  description: NAT gateway datapath where the SNAT rule is configured
                 redo:
                   type: string
+                  description: Redo operation status
                 internalCIDR:
                   type: string
+                  description: Internal CIDR configured in the SNAT rule
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the SNAT rule's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 eip:
                   type: string
+                  description: EIP name for SNAT rule
                 internalCIDR:
-                  type: string`
+                  type: string
+                  description: Internal CIDR to be translated via SNAT`
 	ovn_eips_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1609,47 +1839,64 @@ spec:
               properties:
                 type:
                   type: string
+                  description: Type of the OVN EIP
                 nat:
                   type: string
+                  description: NAT configuration status
                 ready:
                   type: boolean
+                  description: Indicates whether the EIP is ready
                 v4Ip:
                   type: string
+                  description: IPv4 address assigned to the EIP
                 v6Ip:
                   type: string
+                  description: IPv6 address assigned to the EIP
                 macAddress:
                   type: string
+                  description: MAC address assigned to the EIP
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the EIP's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 externalSubnet:
                   type: string
+                  description: External subnet name. This field is immutable after creation.
                 type:
                   type: string
+                  description: Type of the OVN EIP (e.g., normal, distributed)
                 v4Ip:
                   type: string
+                  description: IPv4 address for the EIP
                 v6Ip:
                   type: string
+                  description: IPv6 address for the EIP
                 macAddress:
-                  type: string`
-
+                  type: string
+                  description: MAC address for the EIP`
 	ovn_fips_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1707,51 +1954,72 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the FIP is ready
                 v4Eip:
                   type: string
+                  description: IPv4 EIP address assigned
                 v6Eip:
                   type: string
+                  description: IPv6 EIP address assigned
                 v4Ip:
                   type: string
+                  description: IPv4 address mapped to the FIP
                 v6Ip:
                   type: string
+                  description: IPv6 address mapped to the FIP
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name where the FIP is configured
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the FIP's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 ovnEip:
                   type: string
+                  description: OVN EIP name to use for floating IP
                 ipType:
                   type: string
+                  description: IP type (e.g., ipv4, ipv6, dual)
                 type:
                   type: string
+                  description: FIP type
                 ipName:
                   type: string
+                  description: IP resource name
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name. This field is immutable after creation.
                 v4Ip:
                   type: string
+                  description: IPv4 address for the floating IP
                 v6Ip:
-                  type: string`
-
+                  type: string
+                  description: IPv6 address for the floating IP`
 	ovn_snat_rules_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1800,49 +2068,69 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the SNAT rule is ready
                 v4Eip:
                   type: string
+                  description: IPv4 EIP address assigned
                 v6Eip:
                   type: string
+                  description: IPv6 EIP address assigned
                 v4IpCidr:
                   type: string
+                  description: IPv4 CIDR configured in the SNAT rule
                 v6IpCidr:
                   type: string
+                  description: IPv6 CIDR configured in the SNAT rule
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name where the SNAT rule is configured
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the SNAT rule's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 ovnEip:
                   type: string
+                  description: OVN EIP name for SNAT rule
                 vpcSubnet:
                   type: string
+                  description: VPC subnet name for SNAT
                 ipName:
                   type: string
+                  description: IP resource name
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name. This field is immutable after creation.
                 v4IpCidr:
                   type: string
+                  description: IPv4 CIDR for SNAT
                 v6IpCidr:
-                  type: string`
-
+                  type: string
+                  description: IPv6 CIDR for SNAT`
 	ovn_dnat_rules_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1906,63 +2194,92 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Indicates whether the DNAT rule is ready
                 v4Eip:
                   type: string
+                  description: IPv4 EIP address assigned
                 v6Eip:
                   type: string
+                  description: IPv6 EIP address assigned
                 v4Ip:
                   type: string
+                  description: IPv4 address configured in the DNAT rule
                 v6Ip:
                   type: string
+                  description: IPv6 address configured in the DNAT rule
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name where the DNAT rule is configured
                 externalPort:
                   type: string
+                  description: External port configured in the DNAT rule
                 internalPort:
                   type: string
+                  description: Internal port configured in the DNAT rule
                 protocol:
+                  description: Network protocol (IPv4, IPv6, or Dual). Immutable after creation.
                   type: string
+                  description: Protocol type configured in the DNAT rule
                 ipName:
                   type: string
+                  description: IP resource name
                 conditions:
                   type: array
+                  description: Conditions represent the latest available observations of the DNAT rule's current state
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 ovnEip:
                   type: string
+                  description: OVN EIP name for DNAT rule
                 ipType:
                   type: string
+                  description: IP type (e.g., ipv4, ipv6, dual)
                 ipName:
                   type: string
+                  description: IP resource name
                 externalPort:
                   type: string
+                  description: External port number
                 internalPort:
                   type: string
+                  description: Internal port number to forward traffic to
                 protocol:
+                  description: Network protocol (IPv4, IPv6, or Dual). Immutable after creation.
                   type: string
+                  description: Protocol type (TCP or UDP)
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
+                  description: VPC name. This field is immutable after creation.
                 v4Ip:
                   type: string
+                  description: IPv4 address for DNAT
                 v6Ip:
-                  type: string`
-
+                  type: string
+                  description: IPv6 address for DNAT`
 	vpcs_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2000,19 +2317,26 @@ spec:
               properties:
                 defaultSubnet:
                   type: string
+                  description: The default subnet name for the VPC
                 enableExternal:
                   type: boolean
+                  description: Enable external network access for the VPC
                 enableBfd:
                   type: boolean
+                  description: Enable BFD (Bidirectional Forwarding Detection) for the VPC
                 namespaces:
+                  description: List of namespaces associated with this subnet.
                   items:
                     type: string
                   type: array
+                  description: List of namespaces that can use this VPC
                 extraExternalSubnets:
+                  description: Extra external subnets for provider-network VLAN. Immutable after creation.
                   items:
                     type: string
                   type: array
                 staticRoutes:
+                  description: Static routes for the VPC.
                   items:
                     properties:
                       policy:
@@ -2030,10 +2354,14 @@ spec:
                     type: object
                   type: array
                 policyRoutes:
+                  description: Policy routes for the VPC.
                   items:
                     properties:
                       priority:
                         type: integer
+                        description: Priority of the policy route (0-32767)
+                        min: 0
+                        max: 32767
                       action:
                         type: string
                       match:
@@ -2043,6 +2371,7 @@ spec:
                     type: object
                   type: array
                 vpcPeerings:
+                  description: VPC peering configurations.
                   items:
                     properties:
                       remoteVpc:
@@ -2055,9 +2384,11 @@ spec:
                   properties:
                     enabled:
                       type: boolean
+                      description: Enable BFD port
                       default: false
                     ip:
                       type: string
+                      description: IP address for BFD port (IPv4, IPv6, or comma-separated pair)
                       anyOf:
                         - pattern: ^$
                         - pattern: ^(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])$
@@ -2071,8 +2402,10 @@ spec:
                             properties:
                               key:
                                 type: string
+                                description: Label key
                               operator:
                                 type: string
+                                description: Label operator
                                 enum:
                                   - In
                                   - NotIn
@@ -2117,6 +2450,7 @@ spec:
                     type: object
                   type: array
                 default:
+                  description: Whether this is the default subnet.
                   type: boolean
                 defaultLogicalSwitch:
                   type: string
@@ -2133,10 +2467,12 @@ spec:
                     type: string
                   type: array
                 extraExternalSubnets:
+                  description: Extra external subnets for provider-network VLAN. Immutable after creation.
                   items:
                     type: string
                   type: array
                 vpcPeerings:
+                  description: VPC peering configurations.
                   items:
                     type: string
                   type: array
@@ -2157,10 +2493,13 @@ spec:
                   properties:
                     ip:
                       type: string
+                      description: BFD port IP address
                     name:
                       type: string
+                      description: BFD port name
                     nodes:
                       type: array
+                      description: Nodes where BFD port is deployed
                       items:
                         type: string
               type: object
@@ -2177,7 +2516,6 @@ spec:
       - vpc
     singular: vpc
   scope: Cluster`
-
 	ips_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2213,36 +2551,49 @@ spec:
               properties:
                 podName:
                   type: string
+                  description: Pod name that this IP belongs to
                 namespace:
                   type: string
+                  description: Namespace of the pod
                 subnet:
                   type: string
+                  description: Primary subnet name for the IP. This field is immutable after creation.
                 attachSubnets:
                   type: array
+                  description: Additional attached subnets
                   items:
                     type: string
                 nodeName:
                   type: string
+                  description: Node name where the pod resides
                 ipAddress:
                   type: string
+                  description: IP address (deprecated, use v4IpAddress or v6IpAddress)
                 v4IpAddress:
                   type: string
+                  description: IPv4 address
                 v6IpAddress:
                   type: string
+                  description: IPv6 address
                 attachIps:
                   type: array
+                  description: Additional IP addresses from attached subnets
                   items:
                     type: string
                 macAddress:
                   type: string
+                  description: MAC address for the primary IP
                 attachMacs:
                   type: array
+                  description: MAC addresses for attached IPs
                   items:
                     type: string
                 containerID:
                   type: string
+                  description: Container ID
                 podType:
                   type: string
+                  description: Pod type (e.g., pod, vm)
   scope: Cluster
   names:
     plural: ips
@@ -2250,7 +2601,6 @@ spec:
     kind: IP
     shortNames:
       - ip`
-
 	vips_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2270,6 +2620,9 @@ spec:
       served: true
       storage: true
       additionalPrinterColumns:
+      - name: Namespace
+        type: string
+        jsonPath: .spec.namespace
       - name: V4IP
         type: string
         jsonPath: .status.v4ip
@@ -2294,59 +2647,76 @@ spec:
               properties:
                 type:
                   type: string
-                ready:
-                  type: boolean
+                  description: Type of VIP (e.g., Layer2, HealthCheck)
                 v4ip:
                   type: string
+                  description: Allocated IPv4 address
                 v6ip:
                   type: string
+                  description: Allocated IPv6 address
                 mac:
                   type: string
+                  description: MAC address associated with the VIP
                 selector:
                   type: array
+                  description: Pod names selected by this VIP
                   items:
                     type: string
                 conditions:
                   type: array
+                  description: Conditions represent the latest state of the VIP
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of the condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 namespace:
                   type: string
+                  description: Namespace where the VIP is created. This field is immutable after creation.
                 subnet:
                   type: string
+                  description: Subnet name for the VIP. This field is immutable after creation.
                 type:
                   type: string
+                  description: Type of VIP. This field is immutable after creation.
                 attachSubnets:
                   type: array
+                  description: Additional subnets to attach
                   items:
                     type: string
                 v4ip:
                   type: string
+                  description: Specific IPv4 address to use (optional, will be allocated if not specified)
                 macAddress:
                   type: string
+                  description: MAC address for the VIP
                 v6ip:
                   type: string
+                  description: Specific IPv6 address to use (optional, will be allocated if not specified)
                 selector:
                   type: array
+                  description: Pod names to be selected by this VIP
                   items:
                     type: string`
-
 	subnets_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2433,6 +2803,7 @@ spec:
                 dhcpV6OptionsUUID:
                   type: string
                 u2oInterconnectionIP:
+                  description: Underlay to overlay interconnection IP.
                   type: string
                 u2oInterconnectionMAC:
                   type: string
@@ -2451,6 +2822,7 @@ spec:
                 v6availableIPrange:
                   type: string
                 natOutgoingPolicyRules:
+                  description: NAT outgoing policy rules.
                   type: array
                   items:
                     type: object
@@ -2490,50 +2862,89 @@ spec:
               type: object
               properties:
                 vpc:
+                  description: VPC name for the subnet. Immutable after creation.
                   type: string
                 default:
+                  description: Whether this is the default subnet.
                   type: boolean
                 protocol:
+                  description: Network protocol (IPv4, IPv6, or Dual). Immutable after creation.
                   type: string
                   enum:
                     - IPv4
                     - IPv6
                     - Dual
                 cidrBlock:
+                  description: CIDR block for the subnet. Immutable after creation.
                   type: string
                 namespaces:
+                  description: List of namespaces associated with this subnet.
                   type: array
                   items:
                     type: string
                 gateway:
+                  description: Gateway IP address for the subnet.
                   type: string
                 provider:
+                  description: Provider network name.
                   type: string
                 excludeIps:
+                  description: IP addresses to exclude from allocation.
                   type: array
                   items:
                     type: string
                 vips:
+                  description: Virtual IP addresses for the subnet.
                   type: array
                   items:
                     type: string
                 gatewayType:
+                  description: Gateway type (distributed or centralized).
                   type: string
                 allowSubnets:
+                  description: Allowed subnets for east-west traffic.
                   type: array
                   items:
                     type: string
                 gatewayNode:
+                  description: Gateway node for centralized gateway mode.
                   type: string
+                gatewayNodeSelectors:
+                  description: Node selectors for gateway placement.
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      matchLabels:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      matchExpressions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key:
+                              type: string
+                            operator:
+                              type: string
+                            values:
+                              type: array
+                              items:
+                                type: string
                 natOutgoing:
+                  description: Enable NAT for outgoing traffic.
                   type: boolean
                 externalEgressGateway:
+                  description: External egress gateway for the subnet.
                   type: string
                 policyRoutingPriority:
+                  description: Policy routing priority.
                   type: integer
                   minimum: 1
                   maximum: 32765
                 policyRoutingTableID:
+                  description: Policy routing table ID.
                   type: integer
                   minimum: 1
                   maximum: 2147483647
@@ -2544,32 +2955,45 @@ spec:
                       - 254 # main
                       - 255 # local
                 mtu:
+                  description: Maximum transmission unit for the subnet.
                   type: integer
                   minimum: 68
                   maximum: 65535
                 private:
+                  description: Whether the subnet is private.
                   type: boolean
                 vlan:
+                  description: VLAN ID for the subnet. Immutable after creation.
                   type: string
                 logicalGateway:
+                  description: Whether to use logical gateway.
                   type: boolean
                 disableGatewayCheck:
+                  description: Disable gateway connectivity check.
                   type: boolean
                 disableInterConnection:
+                  description: Disable subnet interconnection.
                   type: boolean
                 enableDHCP:
+                  description: Enable DHCP for the subnet.
                   type: boolean
                 dhcpV4Options:
+                  description: DHCPv4 options for the subnet.
                   type: string
                 dhcpV6Options:
+                  description: DHCPv6 options for the subnet.
                   type: string
                 enableIPv6RA:
+                  description: Enable IPv6 router advertisement.
                   type: boolean
                 ipv6RAConfigs:
+                  description: IPv6 router advertisement configurations.
                   type: string
                 allowEWTraffic:
+                  description: Allow east-west traffic between pods.
                   type: boolean
                 acls:
+                  description: Access control lists for the subnet.
                   type: array
                   items:
                     type: object
@@ -2594,6 +3018,7 @@ spec:
                           - drop
                           - reject
                 natOutgoingPolicyRules:
+                  description: NAT outgoing policy rules.
                   type: array
                   items:
                     type: object
@@ -2611,20 +3036,28 @@ spec:
                           dstIPs:
                             type: string
                 u2oInterconnection:
+                  description: Enable underlay to overlay interconnection.
                   type: boolean
                 u2oInterconnectionIP:
+                  description: Underlay to overlay interconnection IP.
                   type: string
                 enableLb:
+                  description: Enable load balancer for the subnet.
                   type: boolean
                 enableEcmp:
+                  description: Enable ECMP for the subnet.
                   type: boolean
                 enableMulticastSnoop:
+                  description: Enable multicast snooping.
                   type: boolean
                 enableExternalLBAddress:
+                  description: Enable external load balancer address.
                   type: boolean
                 routeTable:
+                  description: Route table for the subnet.
                   type: string
                 namespaceSelectors:
+                  description: Namespace selectors for subnet association.
                   type: array
                   items:
                     type: object
@@ -2646,6 +3079,9 @@ spec:
                               type: array
                               items:
                                 type: string
+                nodeNetwork:
+                  description: Node network for the subnet.
+                  type: string
   scope: Cluster
   names:
     plural: subnets
@@ -2653,7 +3089,6 @@ spec:
     kind: Subnet
     shortNames:
       - subnet`
-
 	ippools_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2670,6 +3105,9 @@ spec:
       - name: Subnet
         type: string
         jsonPath: .spec.subnet
+      - name: enableAddressSet
+        type: boolean
+        jsonPath: .spec.enableAddressSet
       - name: IPs
         type: string
         jsonPath: .spec.ips
@@ -2694,18 +3132,22 @@ spec:
               properties:
                 subnet:
                   type: string
+                  description: Subnet name for the IP pool. This field is immutable.
                   x-kubernetes-validations:
                     - rule: "self == oldSelf"
                       message: "This field is immutable."
                 namespaces:
+                  description: List of namespaces associated with this subnet.
                   type: array
                   x-kubernetes-list-type: set
+                  description: Namespaces that can use this IP pool
                   items:
                     type: string
                 ips:
                   type: array
                   minItems: 1
                   x-kubernetes-list-type: set
+                  description: IP addresses or ranges in the pool (IPv4/IPv6 addresses or CIDR ranges)
                   items:
                     type: string
                     anyOf:
@@ -2714,6 +3156,10 @@ spec:
                       - format: cidr
                       - pattern: ^(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.\.(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])$
                       - pattern: ^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|:)))\.\.((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|:)))$
+                enableAddressSet:
+                  type: boolean
+                  default: false
+                  description: EnableAddressSet to work with policy-based routing and ACL
               required:
                 - subnet
                 - ips
@@ -2722,37 +3168,52 @@ spec:
               properties:
                 v4AvailableIPs:
                   type: number
+                  description: Number of available IPv4 addresses
                 v4UsingIPs:
                   type: number
+                  description: Number of using IPv4 addresses
                 v6AvailableIPs:
                   type: number
+                  description: Number of available IPv6 addresses
                 v6UsingIPs:
                   type: number
+                  description: Number of using IPv6 addresses
                 v4AvailableIPRange:
                   type: string
+                  description: Available IPv4 address range
                 v4UsingIPRange:
                   type: string
+                  description: IPv4 address range in use
                 v6AvailableIPRange:
                   type: string
+                  description: Available IPv6 address range
                 v6UsingIPRange:
                   type: string
+                  description: IPv6 address range in use
                 conditions:
                   type: array
+                  description: Conditions represent the latest state of the IP pool
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of the condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
   scope: Cluster
   names:
     plural: ippools
@@ -2760,7 +3221,6 @@ spec:
     kind: IPPool
     shortNames:
       - ippool`
-
 	vlans_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2782,10 +3242,12 @@ spec:
               properties:
                 id:
                   type: integer
+                  description: VLAN ID (0-4095). This field is immutable after creation.
                   minimum: 0
                   maximum: 4095
                 provider:
                   type: string
+                  description: Provider network name. This field is immutable after creation.
                 vlanId:
                   type: integer
                   description: Deprecated in favor of id
@@ -2799,10 +3261,12 @@ spec:
               properties:
                 subnets:
                   type: array
+                  description: List of subnet names using this VLAN
                   items:
                     type: string
                 conflict:
                   type: boolean
+                  description: Whether there is a conflict with this VLAN
       additionalPrinterColumns:
       - name: ID
         type: string
@@ -2820,7 +3284,6 @@ spec:
     kind: Vlan
     shortNames:
       - vlan`
-
 	provider_networks_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2851,27 +3314,69 @@ spec:
               properties:
                 defaultInterface:
                   type: string
+                  description: Default interface name for the provider network. This field is immutable after creation.
                   maxLength: 15
                   pattern: '^[^/\s]+$'
                 customInterfaces:
                   type: array
+                  description: Custom interface configurations for specific nodes
                   items:
                     type: object
                     properties:
                       interface:
                         type: string
+                        description: Interface name
                         maxLength: 15
                         pattern: '^[^/\s]+$'
                       nodes:
                         type: array
+                        description: Nodes that use this custom interface
                         items:
                           type: string
                 exchangeLinkName:
                   type: boolean
+                nodeSelector:
+                  properties:
+                    matchExpressions:
+                      items:
+                        properties:
+                          key:
+                            type: string
+                          operator:
+                            type: string
+                          values:
+                            items:
+                              type: string
+                            type: array
+                        required:
+                          - key
+                          - operator
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: map
+                      x-kubernetes-list-map-keys:
+                        - key
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
                 excludeNodes:
                   type: array
                   items:
                     type: string
+                autoCreateVlanSubinterfaces:
+                  type: boolean
+                  description: Automatically create VLAN subinterfaces
+                preserveVlanInterfaces:
+                  type: boolean
+                  description: Enable automatic detection and preservation of VLAN interfaces
+                vlanInterfaces:
+                  type: array
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9_-]+\.[0-9]{1,4}$'
+                  description: Optional explicit list of VLAN interface names to preserve (e.g., eth0.10, bond0.20)
               required:
                 - defaultInterface
             status:
@@ -2879,37 +3384,49 @@ spec:
               properties:
                 ready:
                   type: boolean
+                  description: Whether the provider network is ready
                 readyNodes:
                   type: array
+                  description: Nodes that are ready
                   items:
                     type: string
                 notReadyNodes:
                   type: array
+                  description: Nodes that are not ready
                   items:
                     type: string
                 vlans:
                   type: array
+                  description: VLANs in use by this provider network
                   items:
                     type: string
                 conditions:
                   type: array
+                  description: Conditions of nodes in the provider network
                   items:
                     type: object
                     properties:
                       node:
                         type: string
+                        description: Node name
                       type:
                         type: string
+                        description: Type of the condition
                       status:
                         type: string
+                        description: Status of the condition
                       reason:
                         type: string
+                        description: Reason for the condition
                       message:
                         type: string
+                        description: Message about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last update time
                       lastTransitionTime:
                         type: string
+                        description: Last transition time
       additionalPrinterColumns:
       - name: DefaultInterface
         type: string
@@ -2923,7 +3440,6 @@ spec:
     singular: provider-network
     kind: ProviderNetwork
     listKind: ProviderNetworkList`
-
 	security_groups_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -2951,72 +3467,110 @@ spec:
               properties:
                 ingressRules:
                   type: array
+                  description: Ingress traffic rules for the security group
                   items:
                     type: object
                     properties:
                       ipVersion:
                         type: string
+                        description: IP version (IPv4 or IPv6)
                       protocol:
                         type: string
+                        description: Protocol (tcp, udp, icmp, or all)
                       priority:
                         type: integer
+                        description: Rule priority (1-200)
+                        min: 1
+                        max: 200
                       remoteType:
                         type: string
+                        description: Type of remote (address, cidr, or securityGroup)
                       remoteAddress:
                         type: string
+                        description: Remote address or CIDR
                       remoteSecurityGroup:
                         type: string
+                        description: Remote security group name
                       portRangeMin:
                         type: integer
+                        description: Start of port range (1-65535)
+                        min: 1
+                        max: 65535
                       portRangeMax:
                         type: integer
+                        description: End of port range (1-65535)
+                        min: 1
+                        max: 65535
                       policy:
                         type: string
+                        description: Policy action (allow or deny)
                 egressRules:
                   type: array
+                  description: Egress traffic rules for the security group
                   items:
                     type: object
                     properties:
                       ipVersion:
                         type: string
+                        description: IP version (IPv4 or IPv6)
                       protocol:
                         type: string
+                        description: Protocol (tcp, udp, icmp, or all)
                       priority:
                         type: integer
+                        description: Rule priority (1-200)
+                        min: 1
+                        max: 200
                       remoteType:
                         type: string
+                        description: Type of remote (address, cidr, or securityGroup)
                       remoteAddress:
                         type: string
+                        description: Remote address or CIDR
                       remoteSecurityGroup:
                         type: string
+                        description: Remote security group name
                       portRangeMin:
                         type: integer
+                        description: Start of port range (1-65535)
+                        min: 1
+                        max: 65535
                       portRangeMax:
                         type: integer
+                        description: End of port range (1-65535)
+                        min: 1
+                        max: 65535
                       policy:
                         type: string
+                        description: Policy action (allow or deny)
                 allowSameGroupTraffic:
                   type: boolean
+                  description: Allow traffic between pods in the same security group
             status:
               type: object
               properties:
                 portGroup:
                   type: string
+                  description: OVN port group name
                 allowSameGroupTraffic:
                   type: boolean
+                  description: Current allow same group traffic setting
                 ingressMd5:
                   type: string
+                  description: MD5 hash of ingress rules
                 egressMd5:
                   type: string
+                  description: MD5 hash of egress rules
                 ingressLastSyncSuccess:
                   type: boolean
+                  description: Last ingress sync success status
                 egressLastSyncSuccess:
                   type: boolean
+                  description: Last egress sync success status
       subresources:
         status: {}
   conversion:
     strategy: None`
-
 	qos_policies_crd = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -3053,79 +3607,107 @@ spec:
               properties:
                 shared:
                   type: boolean
+                  description: Whether the QoS policy is shared
                 bindingType:
                   type: string
+                  description: Binding type of the QoS policy
                 bandwidthLimitRules:
                   type: array
+                  description: Active bandwidth limit rules
                   items:
                     type: object
                     properties:
                       name:
                         type: string
+                        description: Rule name
                       interface:
                         type: string
+                        description: Interface name
                       rateMax:
                         type: string
+                        description: Maximum rate (e.g., 100Mbps)
                       burstMax:
                         type: string
+                        description: Maximum burst rate
                       priority:
                         type: integer
+                        description: Rule priority
                       direction:
                         type: string
+                        description: Traffic direction (ingress/egress)
                       matchType:
                         type: string
+                        description: Match type
                       matchValue:
                         type: string
+                        description: Match value
                 conditions:
                   type: array
+                  description: Conditions of the QoS policy
                   items:
                     type: object
                     properties:
                       type:
                         type: string
+                        description: Type of the condition
                       status:
                         type: string
+                        description: Status of the condition (True, False, Unknown)
                       reason:
                         type: string
+                        description: Reason for the condition's last transition
                       message:
                         type: string
+                        description: Human-readable message indicating details about the condition
                       lastUpdateTime:
                         type: string
+                        description: Last time this condition was updated
                       lastTransitionTime:
                         type: string
+                        description: Last time the condition transitioned from one status to another
             spec:
               type: object
               properties:
                 shared:
                   type: boolean
+                  description: Whether the QoS policy is shared across multiple pods
                 bindingType:
                   type: string
+                  description: Binding type (e.g., pod, namespace)
                 bandwidthLimitRules:
                   type: array
+                  description: Bandwidth limit rules to apply
                   items:
                     type: object
                     properties:
                       name:
                         type: string
+                        description: Rule name
                       interface:
                         type: string
+                        description: Network interface to apply the rule
                       rateMax:
                         type: string
+                        description: Maximum rate (e.g., 100Mbps, 1Gbps)
                       burstMax:
                         type: string
+                        description: Maximum burst rate
                       priority:
                         type: integer
+                        description: Rule priority for ordering
                       direction:
                         type: string
+                        description: Traffic direction (ingress or egress)
                       matchType:
                         type: string
+                        description: Type of traffic matching (e.g., pod, namespace)
                       matchValue:
                         type: string
+                        description: Value to match for the rule
                     required:
                       - name
                   x-kubernetes-list-map-keys:
                     - name
                   x-kubernetes-list-type: map`
-
 	CRDList = []string{vpc_dnses_crd, switch_lb_rules_crd, vpc_nat_gateways_crd, vpc_egress_gateways_crd, iptables_eips_crd, iptables_fip_rules_crd, iptables_dnat_rules_crd, iptables_snat_rules_crd, ovn_eips_crd, ovn_fips_crd, ovn_snat_rules_crd, ovn_dnat_rules_crd, vpcs_crd, ips_crd, vips_crd, subnets_crd, ippools_crd, vlans_crd, provider_networks_crd, security_groups_crd, qos_policies_crd}
 )

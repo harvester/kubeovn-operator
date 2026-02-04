@@ -42,7 +42,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
       serviceAccountName: ovn-ovs
+      automountServiceAccountToken: true
       hostNetwork: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: hostpath-init
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -220,7 +224,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
       serviceAccountName: ovn
+      automountServiceAccountToken: true
       hostNetwork: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: hostpath-init
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -245,6 +253,7 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
           - /kube-ovn/start-controller.sh
+          - --non-primary-cni-mode={{ .Values.cniConf.nonPrimaryCNI }}
           - --default-ls={{ .Values.networking.defaultSubnet }}
           - --default-cidr=
           {{- if eq .Values.networking.netStack "dual_stack" -}}
@@ -317,6 +326,11 @@ spec:
           - --enable-anp={{- .Values.components.enableANP }}
           - --ovsdb-con-timeout={{- .Values.components.OVSDBConTimeout }}
           - --ovsdb-inactivity-timeout={{- .Values.components.OVSDBInactivityTimeout }}
+          - --np-enforcement={{- .Values.components.npEnforcement }}
+          - --enable-live-migration-optimize={{- .Values.components.enableLiveMigrationOptimize }}
+          - --enable-ovn-lb-prefer-local={{- .Values.components.enableOVNLBPreferLocal }}
+          - --skip-conntrack-dst-cidrs={{- .Values.networking.skipConnTrackDstCIDRs | default ""}}
+          - --enable-dns-name-resolver={{- .Values.components.enableDNSNameResolver }}
           securityContext:
             runAsUser: {{ include "kubeovn.runAsUser" . }}
             privileged: false
@@ -335,11 +349,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: KUBE_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: KUBE_NODE_NAME
+            - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
@@ -448,7 +458,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
       serviceAccountName: ovn
+      automountServiceAccountToken: true
       hostNetwork: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: hostpath-init
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -518,6 +532,9 @@ spec:
       nodeSelector:
         kubernetes.io/os: "linux"
         kube-ovn/role: "master"
+        {{- with splitList "=" .Values.MASTER_NODES_LABEL }}
+        {{ index . 0 }}: "{{ if eq (len .) 2 }}{{ index . 1 }}{{ end }}"
+        {{- end }}
       volumes:
         - name: host-run-ovn
           hostPath:
@@ -576,7 +593,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
       serviceAccountName: kube-ovn-app
+      automountServiceAccountToken: true
       hostNetwork: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: hostpath-init
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -616,7 +637,7 @@ spec:
           env:
             - name: ENABLE_SSL
               value: "{{ .Values.networking.enableSSL }}"
-            - name: KUBE_NODE_NAME
+            - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
