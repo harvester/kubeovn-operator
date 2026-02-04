@@ -214,14 +214,8 @@ spec:
                           repository:
                             default: kube-ovn
                             type: string
-                          supportArm:
-                            default: true
-                            type: boolean
                           tag:
                             type: string
-                          thirdParty:
-                            default: true
-                            type: boolean
                           vpcRepository:
                             default: vpc-nat-gateway
                             type: string

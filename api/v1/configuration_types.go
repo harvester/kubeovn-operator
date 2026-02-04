@@ -107,10 +107,6 @@ type KubeOVNImageSpec struct {
 	DpdkRepository string `json:"dpdkRepository,omitempty"`
 	// +kubebuilder:default:="vpc-nat-gateway"
 	VpcRepository string `json:"vpcRepository,omitempty"`
-	// +kubebuilder:default:=true
-	SupportArm *bool `json:"supportArm,omitempty"`
-	// +kubebuilder:default:=true
-	ThirdParty *bool `json:"thirdParty,omitempty"`
 }
 
 type NetworkingSpec struct {
