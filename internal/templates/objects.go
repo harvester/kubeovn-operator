@@ -15,6 +15,7 @@ var OrderedObjectList = map[client.Object][]string{
 	&corev1.ServiceAccount{}:     ServiceAccountList,
 	&rbacv1.RoleBinding{}:        RoleBindingList,
 	&rbacv1.ClusterRole{}:        ClusterRoleList,
+	&rbacv1.Role{}:               RoleList,
 	&rbacv1.ClusterRoleBinding{}: ClusterRoleBindingList,
 	&corev1.ConfigMap{}:          ConfigMapList,
 	&appsv1.Deployment{}:         DeploymentList,
