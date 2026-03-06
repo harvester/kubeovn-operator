@@ -57,7 +57,7 @@ spec:
             - "chown -R nobody: /var/run/ovn /etc/ovn /var/log/ovn"
           securityContext:
             allowPrivilegeEscalation: true
-            capabfserilities:
+            capabilities:
               drop:
                 - ALL
             privileged: true
@@ -73,7 +73,7 @@ spec:
         - name: ovn-central
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          command: 
+          command:
           - bash
           - /kube-ovn/start-db.sh
           securityContext:
@@ -125,6 +125,7 @@ spec:
             limits:
               cpu: {{ index .Values "ovnCentral" "limits" "cpu" }}
               memory: {{ index .Values "ovnCentral" "limits" "memory" }}
+              ephemeral-storage: {{ index .Values "ovnCentral" "limits" "ephemeralStorage" }}
           volumeMounts:
             - mountPath: /var/run/ovn
               name: host-run-ovn
@@ -329,6 +330,7 @@ spec:
           - --np-enforcement={{- .Values.components.npEnforcement }}
           - --enable-live-migration-optimize={{- .Values.components.enableLiveMigrationOptimize }}
           - --enable-ovn-lb-prefer-local={{- .Values.components.enableOVNLBPreferLocal }}
+          - --image={{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
           - --skip-conntrack-dst-cidrs={{- .Values.networking.skipConnTrackDstCIDRs | default ""}}
           - --enable-dns-name-resolver={{- .Values.components.enableDNSNameResolver }}
           securityContext:
@@ -399,6 +401,7 @@ spec:
             limits:
               cpu: {{ index .Values "kubeOvnController" "limits" "cpu" }}
               memory: {{ index .Values "kubeOvnController" "limits" "memory" }}
+              ephemeral-storage: {{ index .Values "kubeOvnController" "limits" "ephemeralStorage" }}
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
@@ -518,6 +521,7 @@ spec:
             limits:
               cpu: 3
               memory: 1Gi
+              ephemeral-storage: 1Gi
           volumeMounts:
             - mountPath: /var/run/ovn
               name: host-run-ovn
@@ -531,7 +535,6 @@ spec:
               name: kube-ovn-log
       nodeSelector:
         kubernetes.io/os: "linux"
-        kube-ovn/role: "master"
         {{- with splitList "=" .Values.MASTER_NODES_LABEL }}
         {{ index . 0 }}: "{{ if eq (len .) 2 }}{{ index . 1 }}{{ end }}"
         {{- end }}
@@ -666,6 +669,7 @@ spec:
             limits:
               cpu: {{ index .Values "kubeOvnMonitor" "limits" "cpu" }}
               memory: {{ index .Values "kubeOvnMonitor" "limits" "memory" }}
+              ephemeral-storage: {{ index .Values "kubeOvnMonitor" "limits" "ephemeralStorage" }}
           volumeMounts:
             - mountPath: /var/run/ovn
               name: host-run-ovn

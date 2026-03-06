@@ -55,7 +55,13 @@ rules:
       - qos-policies
       - qos-policies/status
     verbs:
-      - "*"
+      - create
+      - get
+      - list
+      - update
+      - patch
+      - watch
+      - delete
   - apiGroups:
       - ""
     resources:
@@ -172,7 +178,11 @@ rules:
     resources:
       - leases
     verbs:
-      - "*"
+      - create
+      - update
+      - patch
+      - get
+      - watch
   - apiGroups:
       - "kubevirt.io"
     resources:
@@ -204,11 +214,11 @@ rules:
       - subjectaccessreviews
     verbs:
       - create
-  - apiGroups: 
+  - apiGroups:
       - "certificates.k8s.io"
-    resources: 
+    resources:
       - "certificatesigningrequests"
-    verbs: 
+    verbs:
       - "get"
       - "list"
       - "watch"
@@ -351,12 +361,12 @@ rules:
       - subjectaccessreviews
     verbs:
       - create
-  - apiGroups: 
+  - apiGroups:
       - "certificates.k8s.io"
-    resources: 
+    resources:
       - "certificatesigningrequests"
-    verbs: 
-      - "create" 
+    verbs:
+      - "create"
       - "get"
       - "list"
       - "watch"
