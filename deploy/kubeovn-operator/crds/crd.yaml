@@ -57,6 +57,9 @@ spec:
                   localBinDir:
                     default: /usr/local/bin
                     type: string
+                  mountCNIConfDir:
+                    default: /etc/cni/net.d
+                    type: string
                   mountLocalBinDir:
                     type: boolean
                   nonPrimaryCNI:
@@ -82,6 +85,9 @@ spec:
                     type: boolean
                   enableBindLocalIP:
                     default: true
+                    type: boolean
+                  enableDNSNameResolver:
+                    default: false
                     type: boolean
                   enableExternalVPC:
                     default: true
@@ -110,6 +116,9 @@ spec:
                   enableOVNIPSec:
                     default: false
                     type: boolean
+                  enableOVNLBPreferLocal:
+                    default: false
+                    type: boolean
                   enableTProxy:
                     default: false
                     type: boolean
@@ -125,6 +134,9 @@ spec:
                   lsDnatModDlDst:
                     default: true
                     type: boolean
+                  npEnforcement:
+                    default: standard
+                    type: string
                   secureServing:
                     default: false
                     type: boolean
@@ -134,15 +146,6 @@ spec:
                   u2oInterconnection:
                     default: false
                     type: boolean
-                  enableDNSNameResolver:
-                    default: false
-                    type: boolean
-                  enableOVNLBPreferLocal:
-                    default: false
-                    type: boolean
-                  npEnforcement:
-                    default: standard
-                    type: string
                 type: object
               debug:
                 default: {}
@@ -155,8 +158,6 @@ spec:
                 type: object
               disableModulesManagement:
                 type: boolean
-              dpdk:
-                type: boolean
               dpdkCPU:
                 anyOf:
                 - type: integer
@@ -164,6 +165,9 @@ spec:
                 default: 1000m
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
+              dpdkImageTag:
+                default: v1.15.0-dpdk
+                type: string
               dpdkMEMORY:
                 anyOf:
                 - type: integer
@@ -171,9 +175,6 @@ spec:
                 default: 2Gi
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
-              dpdkVersion:
-                default: "19.11"
-                type: string
               dualStack:
                 default:
                   joinCIDR: 100.64.0.0/16,fd00:100:64::/112
@@ -218,6 +219,14 @@ spec:
                             type: string
                           vpcRepository:
                             default: vpc-nat-gateway
+                            type: string
+                        type: object
+                      natgateway:
+                        properties:
+                          repository:
+                            default: vpc-nat-gateway
+                            type: string
+                          tag:
                             type: string
                         type: object
                     type: object
@@ -315,9 +324,16 @@ spec:
                   limits:
                     default:
                       cpu: 2
+                      ephemeralStorage: 1Gi
                       memory: 1000Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -336,6 +352,12 @@ spec:
                       memory: 200Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -361,9 +383,16 @@ spec:
                   limits:
                     default:
                       cpu: 2
+                      ephemeralStorage: 1Gi
                       memory: 1000Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -382,6 +411,12 @@ spec:
                       memory: 200Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -407,9 +442,16 @@ spec:
                   limits:
                     default:
                       cpu: 2
+                      ephemeralStorage: 1Gi
                       memory: 1000Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -428,6 +470,12 @@ spec:
                       memory: 200Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -453,9 +501,16 @@ spec:
                   limits:
                     default:
                       cpu: 2
+                      ephemeralStorage: 1Gi
                       memory: 1000Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -474,6 +529,12 @@ spec:
                       memory: 200Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -582,6 +643,9 @@ spec:
                     default: 180000
                     minimum: 1
                     type: integer
+                  skipConnTrackDstCIDRs:
+                    default: ""
+                    type: string
                   tunnelType:
                     default: geneve
                     enum:
@@ -606,8 +670,6 @@ spec:
                         default: ovn-vlan
                         type: string
                     type: object
-                  skipConnTrackDstCIDRs:
-                    type: string
                 type: object
               openVSwitchDir:
                 default: /etc/origin/openvswitch
@@ -620,9 +682,16 @@ spec:
                   limits:
                     default:
                       cpu: 2
+                      ephemeralStorage: 1Gi
                       memory: 1000Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -641,6 +710,12 @@ spec:
                       memory: 200Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -657,6 +732,9 @@ spec:
               ovnDir:
                 default: /etc/origin/ovn
                 type: string
+              ovnIPSecKeysDir:
+                default: /etc/origin/ovs_ipsec_keys
+                type: string
               ovsOVN:
                 default:
                   limits:
@@ -669,9 +747,16 @@ spec:
                   limits:
                     default:
                       cpu: 2
+                      ephemeralStorage: 1Gi
                       memory: 1000Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string
@@ -690,6 +775,12 @@ spec:
                       memory: 200Mi
                     properties:
                       cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
                         anyOf:
                         - type: integer
                         - type: string

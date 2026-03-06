@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: openvswitch
-          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}-dpdk
+          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.dpdkImageTag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: ["/kube-ovn/start-ovs-dpdk-v2.sh"]
           securityContext:
@@ -251,7 +251,7 @@ spec:
         volumeMounts:
           - mountPath: /opt/cni/bin
             name: cni-bin
-          - mountPath: /etc/cni/net.d
+          - mountPath: {{ .Values.cniConf.mountCNIConfDir }}
             name: cni-conf
           {{- if .Values.cniConf.mountLocalBinDir }}
           - mountPath: /usr/local/bin
@@ -296,6 +296,7 @@ spec:
           - --secure-serving={{- .Values.components.secureServing }}
           - --enable-ovn-ipsec={{- .Values.components.enableOVNIPSec }}
           - --set-vxlan-tx-off={{- .Values.components.setVLANTxOff }}
+          - --non-primary-cni-mode={{- .Values.cniConf.nonPrimaryCNI }}
         securityContext:
           runAsUser: 0
           privileged: false
@@ -306,9 +307,6 @@ spec:
               - NET_RAW
               - SYS_ADMIN
               - SYS_PTRACE
-              {{- if not .Values.disableModulesManagement }}
-              - SYS_MODULE
-              {{- end }}
               - SYS_NICE
         env:
           - name: ENABLE_SSL
@@ -401,6 +399,7 @@ spec:
           limits:
             cpu: {{ index .Values "kubeOvnCNI" "limits" "cpu" }}
             memory: {{ index .Values "kubeOvnCNI" "limits" "memory" }}
+            ephemeral-storage: {{ index .Values "kubeOvnCNI" "limits" "ephemeralStorage" }}
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
@@ -457,7 +456,7 @@ spec:
         {{- if .Values.components.enableOVNIPSec }}
         - name: ovs-ipsec-keys
           hostPath:
-            path: /etc/origin/ovs_ipsec_keys
+            path: {{ .Values.ovnIPSecKeysDir }}
         {{- end }}`
 
 	ovs_ovn_daemonset = `kind: DaemonSet
@@ -468,12 +467,13 @@ metadata:
   annotations:
     kubernetes.io/description: |
       This daemon set launches the openvswitch daemon.
+    chart-version: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   selector:
     matchLabels:
       app: ovs
   updateStrategy:
-    type: {{ include "kubeovn.ovs-ovn.upgradeStrategy" . }}
+    type: {{ include "kubeovn.ovs-ovn.updateStrategy" . }}
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -483,6 +483,8 @@ spec:
         app: ovs
         component: network
         type: infra
+      annotations:
+        chart-version: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       tolerations:
         - effect: NoSchedule
@@ -501,11 +503,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: hostpath-init
-          {{- if .values.dpdk }}
-          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.dpdkRepository }}:{{ .values.dpdkVersion }}-{{ .Values.global.images.kubeovn.tag }}
-          {{- else }}
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
-          {{- end }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - sh
@@ -513,8 +511,9 @@ spec:
             - |
               chmod +t /usr/local/sbin
               chown -R nobody: /var/run/ovn /var/log/ovn /etc/openvswitch /var/run/openvswitch /var/log/openvswitch
-              {{- if not .Values.disableModulesManagement }}
               iptables -V
+              {{- if not .Values.disableModulesManagement }}
+              /usr/share/openvswitch/scripts/ovs-ctl load-kmod
               {{- else }}
               ln -sf /bin/true /usr/local/sbin/modprobe
               ln -sf /bin/true /usr/local/sbin/modinfo
@@ -528,6 +527,9 @@ spec:
             privileged: true
             runAsUser: 0
           volumeMounts:
+            - mountPath: /lib/modules
+              name: host-modules
+              readOnly: true
             - mountPath: /usr/local/sbin
               name: usr-local-sbin
             - mountPath: /var/log/ovn
@@ -542,17 +544,9 @@ spec:
               name: host-log-ovs
       containers:
         - name: openvswitch
-          {{- if .values.dpdk }}
-          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.dpdkRepository }}:{{ .values.dpdkVersion }}-{{ .Values.global.images.kubeovn.tag }}
-          {{- else }}
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
-          {{- end }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          {{- if .values.dpdk }}
-          command: ["/kube-ovn/start-ovs-dpdk.sh"]
-          {{- else }}
           command: ["/kube-ovn/start-ovs.sh"]
-          {{- end }}
           securityContext:
             runAsUser: {{ include "kubeovn.runAsUser" . }}
             privileged: false
@@ -560,9 +554,7 @@ spec:
               add:
                 - NET_ADMIN
                 - NET_BIND_SERVICE
-                {{- if not .Values.disableModulesManagement }}
-                - SYS_MODULE
-                {{- end }}
+                - NET_RAW
                 - SYS_NICE
                 - SYS_ADMIN
           env:
@@ -618,59 +610,31 @@ spec:
             - mountPath: /var/run/containerd
               name: cruntime
               readOnly: true
-            {{- if .values.dpdk }}
-            - mountPath: /opt/ovs-config
-              name: host-config-ovs
-            - mountPath: /dev/hugepages
-              name: hugepage
-            {{- end }}
           readinessProbe:
             exec:
-              {{- if .values.dpdk }}
-              command:
-                - bash
-                - /kube-ovn/ovs-dpdk-healthcheck.sh
-              {{- else }}
               command:
                 - bash
                 - /kube-ovn/ovs-healthcheck.sh
-              {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 45
           livenessProbe:
             exec:
-              {{- if .values.dpdk }}
-              command:
-                - bash
-                - /kube-ovn/ovs-dpdk-healthcheck.sh
-              {{- else }}
               command:
                 - bash
                 - /kube-ovn/ovs-healthcheck.sh
-              {{- end }}
             initialDelaySeconds: 60
             periodSeconds: 5
             failureThreshold: 5
             timeoutSeconds: 45
           resources:
             requests:
-              {{- if .values.dpdk }}
-              cpu: {{ .values.dpdkCPU }}
-              memory: {{ .values.dpdkMEMORY }}
-              {{- else }}
               cpu: {{ index .Values "ovsOVN" "requests" "cpu" }}
               memory: {{ index .Values "ovsOVN" "requests" "memory" }}
-              {{- end }}
             limits:
-              {{- if .values.dpdk }}
-              cpu: {{ .values.dpdkCPU }}
-              memory: {{ .values.dpdkMEMORY }}
-              hugepages-1Gi: 1Gi
-              {{- else }}
               cpu: {{ index .Values "ovsOVN" "limits" "cpu" }}
               memory: {{ index .Values "ovsOVN" "limits" "memory" }}
-              {{- end }}
+              ephemeral-storage: {{ index .Values "ovsOVN" "limits" "ephemeralStorage" }}
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
@@ -703,16 +667,7 @@ spec:
             secretName: kube-ovn-tls
         - hostPath:
             path: /var/run/containerd
-          name: cruntime
-        {{- if .values.dpdk }}
-        - name: host-config-ovs
-          hostPath:
-            path: /opt/ovs-config
-            type: DirectoryOrCreate
-        - name: hugepage
-          emptyDir:
-            medium: HugePages
-        {{- end }}`
+          name: cruntime`
 
 	kube_ovn_pinger_daemonsets = `kind: DaemonSet
 apiVersion: apps/v1
@@ -852,6 +807,19 @@ spec:
             limits:
               cpu: {{ index .Values "kubeOvnPinger" "limits" "cpu" }}
               memory: {{ index .Values "kubeOvnPinger" "limits" "memory" }}
+              ephemeral-storage: {{ index .Values "kubeOvnPinger" "limits" "ephemeralStorage" }}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:

@@ -41,6 +41,7 @@ var (
 		Limits: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("3"),
 			Memory: resource.MustParse("4Gi"),
+			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
 	ovsOVNDefaultResourceSpec = kubeovnv1.ResourceSpec{
@@ -51,6 +52,7 @@ var (
 		Limits: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("2"),
 			Memory: resource.MustParse("1000Mi"),
+			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
 	kubeOVNControllerDefaultResourceSpec = kubeovnv1.ResourceSpec{
@@ -61,6 +63,7 @@ var (
 		Limits: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("1000m"),
 			Memory: resource.MustParse("1Gi"),
+			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
 	kubeOVNCNIDefaultResourceSpec = kubeovnv1.ResourceSpec{
@@ -71,6 +74,7 @@ var (
 		Limits: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("1000m"),
 			Memory: resource.MustParse("1Gi"),
+			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
 	kubeOVNPingerDefaultResourceSpec = kubeovnv1.ResourceSpec{
@@ -81,6 +85,7 @@ var (
 		Limits: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("200m"),
 			Memory: resource.MustParse("400Mi"),
+			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
 	kubeOVNMonitorDefaultResourceSpec = kubeovnv1.ResourceSpec{
@@ -91,6 +96,7 @@ var (
 		Limits: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("200m"),
 			Memory: resource.MustParse("200Mi"),
+			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
 )
@@ -155,6 +161,14 @@ func applyDefaults(resource, defaultValues kubeovnv1.ResourceSpec) kubeovnv1.Res
 
 	if resource.Limits.Memory.IsZero() {
 		resource.Limits.Memory = defaultValues.Limits.Memory
+	}
+
+	if resource.Requests.EphemeralStorage.IsZero() {
+		resource.Requests.EphemeralStorage = defaultValues.Requests.EphemeralStorage
+	}
+
+	if resource.Limits.EphemeralStorage.IsZero() {
+		resource.Limits.EphemeralStorage = defaultValues.Limits.EphemeralStorage
 	}
 	return resource
 }

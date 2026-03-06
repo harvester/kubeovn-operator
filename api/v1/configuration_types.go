@@ -55,6 +55,8 @@ type ConfigurationSpec struct {
 	LogConfig LogConfigSpec `json:"logConfig,omitempty"`
 	// +kubebuilder:default:="/etc/origin/openvswitch"
 	OpenVSwitchDir string `json:"openVSwitchDir,omitempty"`
+	// +kubebuilder:default:="/etc/origin/ovs_ipsec_keys"
+	OVNIPSecKeysDir string `json:"ovnIPSecKeysDir,omitempty"`
 	// +kubebuilder:default:="/etc/origin/ovn"
 	OVNDir                   string `json:"ovnDir,omitempty"`
 	DisableModulesManagement *bool  `json:"disableModulesManagement,omitempty"`
@@ -63,9 +65,8 @@ type ConfigurationSpec struct {
 	HugepageSizeType string `json:"hugepageSizeType,omitempty"`
 	// +kubebuilder:default:="1Gi"
 	HugePages resource.Quantity `json:"hugePages,omitempty"`
-	DPDK      *bool             `json:"dpdk,omitempty"`
-	// +kubebuilder:default:="19.11"
-	DPDKVersion string `json:"dpdkVersion,omitempty"`
+	// +kubebuilder:default:="v1.15.0-dpdk"
+	DPDKImageTag string `json:"dpdkImageTag,omitempty"`
 	// +kubebuilder:default:="1000m"
 	DPDKCPU resource.Quantity `json:"dpdkCPU,omitempty"`
 	// +kubebuilder:default:="2Gi"
@@ -96,7 +97,8 @@ type RegistrySpec struct {
 }
 
 type ImageDetails struct {
-	KubeOVNImage KubeOVNImageSpec `json:"kubeovn,omitempty"`
+	KubeOVNImage    KubeOVNImageSpec    `json:"kubeovn,omitempty"`
+	NATGatewayImage NATGatewayImageSpec `json:"natgateway,omitempty"`
 }
 
 type KubeOVNImageSpec struct {
@@ -107,6 +109,12 @@ type KubeOVNImageSpec struct {
 	DpdkRepository string `json:"dpdkRepository,omitempty"`
 	// +kubebuilder:default:="vpc-nat-gateway"
 	VpcRepository string `json:"vpcRepository,omitempty"`
+}
+
+type NATGatewayImageSpec struct {
+	// +kubebuilder:default:="vpc-nat-gateway"
+	Repository string `json:"repository,omitempty"`
+	Tag        string `json:"tag,omitempty"` // defaults to version passed from command line
 }
 
 type NetworkingSpec struct {
@@ -272,6 +280,8 @@ type CNIConfSpec struct {
 	CNIConfigPriority string `json:"cniConfigPriority,omitempty"`
 	// +kubebuilder:default:="/etc/cni/net.d"
 	CNIConfigDir string `json:"cniConfigDir,omitempty"`
+	// +kubebuilder:default:="/etc/cni/net.d"
+	MountCNIConfDir string `json:"mountCNIConfDir,omitempty"`
 	// +kubebuilder:default:="/opt/cni/bin"
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 	// +kubebuilder:default:="/kube-ovn/01-kube-ovn.conflist"
@@ -295,13 +305,14 @@ type LogConfigSpec struct {
 type ResourceSpec struct {
 	// +kubebuilder:default:={cpu:"200m",memory:"200Mi"}
 	Requests CPUMemSpec `json:"requests,omitempty"`
-	// +kubebuilder:default:={cpu:2, memory:"1000Mi"}
+	// +kubebuilder:default:={cpu:2, memory:"1000Mi", ephemeralStorage:"1Gi"}
 	Limits CPUMemSpec `json:"limits,omitempty"`
 }
 
 type CPUMemSpec struct {
-	CPU    resource.Quantity `json:"cpu,omitempty"`
-	Memory resource.Quantity `json:"memory,omitempty"`
+	CPU              resource.Quantity `json:"cpu,omitempty"`
+	Memory           resource.Quantity `json:"memory,omitempty"`
+	EphemeralStorage resource.Quantity `json:"ephemeralStorage,omitempty"`
 }
 
 // ConfigurationStatus defines the observed state of Configuration.

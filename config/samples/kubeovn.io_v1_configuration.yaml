@@ -62,9 +62,9 @@ spec:
     joinCIDR: 100.64.0.0/16
     pingerExternalAddress: 1.1.1.1
     pingerExternalDomain: google.com.
-    podCIDR: 10.42.0.0/16
-    podGateway: 10.42.0.1
-    serviceCIDR: 10.43.0.0/16
+    podCIDR: 10.52.0.0/16
+    podGateway: 10.52.0.1
+    serviceCIDR: 10.53.0.0/16
   ipv6:
     joinCIDR: fd00:100:64::/112
     pingerExternalAddress: 2606:4700:4700::1111
