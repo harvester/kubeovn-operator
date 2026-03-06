@@ -6,7 +6,7 @@ kind: ServiceAccount
 metadata:
   name: ovn
   namespace: {{ .Values.namespace }}
-  automountServiceAccountToken: false
+automountServiceAccountToken: false
 {{-  if .Values.global.registry.imagePullSecrets }}
 imagePullSecrets:
 {{- range $index, $secret := .Values.global.registry.imagePullSecrets }}
@@ -22,7 +22,7 @@ kind: ServiceAccount
 metadata:
   name: ovn-ovs
   namespace: {{ .Values.namespace }}
-  automountServiceAccountToken: false
+automountServiceAccountToken: false
 {{-  if .Values.global.registry.imagePullSecrets }}
 imagePullSecrets:
 {{- range $index, $secret := .Values.global.registry.imagePullSecrets }}
@@ -37,7 +37,7 @@ kind: ServiceAccount
 metadata:
   name: kube-ovn-cni
   namespace: {{ .Values.namespace }}
-  automountServiceAccountToken: false
+automountServiceAccountToken: false
 {{-  if .Values.global.registry.imagePullSecrets }}
 imagePullSecrets:
 {{- range $index, $secret := .Values.global.registry.imagePullSecrets }}
@@ -52,7 +52,7 @@ kind: ServiceAccount
 metadata:
   name: kube-ovn-app
   namespace: {{ .Values.namespace }}
-  automountServiceAccountToken: false
+automountServiceAccountToken: false
 {{-  if .Values.global.registry.imagePullSecrets }}
 imagePullSecrets:
 {{- range $index, $secret := .Values.global.registry.imagePullSecrets }}

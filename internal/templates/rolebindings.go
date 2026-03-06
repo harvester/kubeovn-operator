@@ -29,6 +29,20 @@ subjects:
     name: kube-ovn-cni
     namespace: {{ .Values.namespace }}`
 
+	kube_ovn_cni_secret_reader_rolebinding = `apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kube-ovn-cni-secret-reader
+  namespace: {{ .Values.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: kube-ovn-cni
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: secret-reader-ovn-ipsec
+  apiGroup: rbac.authorization.k8s.io` // #nosec G101
+
 	ovn_rolebinding = `apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -57,5 +71,5 @@ roleRef:
   name: secret-reader-ovn-ipsec
   apiGroup: rbac.authorization.k8s.io`
 
-	RoleBindingList = []string{kube_ovn_cni_rolebinding, kube_ovn_app_rolebinding, ovn_rolebinding, ovn_ipsec_rolebinding}
+	RoleBindingList = []string{kube_ovn_cni_rolebinding, kube_ovn_app_rolebinding, kube_ovn_cni_secret_reader_rolebinding, ovn_rolebinding, ovn_ipsec_rolebinding}
 )

@@ -113,7 +113,7 @@ func generateMap(config *ovnoperatorv1.Configuration) (map[string]interface{}, e
 func generateIncludeValues(config *ovnoperatorv1.Configuration) map[string]interface{} {
 	nodeIPS := strings.Join(config.Status.MatchingNodeAddresses, ",")
 	upgradeStratergyMap := map[string]interface{}{
-		"upgradeStrategy": "RollingUpdate",
+		"updateStrategy": "RollingUpdate",
 	}
 
 	// https://github.com/kubernetes/apimachinery/blob/v0.32.1/pkg/runtime/converter.go#L614
