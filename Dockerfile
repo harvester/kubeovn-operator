@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM registry.suse.com/bci/golang:1.25 AS builder
+FROM registry.suse.com/bci/golang:1.25.7 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM registry.suse.com/bci/bci-base:15.6
+FROM registry.suse.com/bci/bci-base:16.0
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532

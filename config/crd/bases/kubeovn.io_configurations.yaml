@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.2
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: configurations.kubeovn.io
 spec:
   group: kubeovn.io
@@ -83,6 +83,9 @@ spec:
                   enableBindLocalIP:
                     default: true
                     type: boolean
+                  enableDNSNameResolver:
+                    default: false
+                    type: boolean
                   enableExternalVPC:
                     default: true
                     type: boolean
@@ -110,6 +113,9 @@ spec:
                   enableOVNIPSec:
                     default: false
                     type: boolean
+                  enableOVNLBPreferLocal:
+                    default: false
+                    type: boolean
                   enableTProxy:
                     default: false
                     type: boolean
@@ -125,6 +131,9 @@ spec:
                   lsDnatModDlDst:
                     default: true
                     type: boolean
+                  npEnforcement:
+                    default: standard
+                    type: string
                   secureServing:
                     default: false
                     type: boolean
@@ -134,15 +143,6 @@ spec:
                   u2oInterconnection:
                     default: false
                     type: boolean
-                  enableDNSNameResolver:
-                    default: false
-                    type: boolean
-                  enableOVNLBPreferLocal:
-                    default: false
-                    type: boolean
-                  npEnforcement:
-                    default: standard
-                    type: string
                 type: object
               debug:
                 default: {}
@@ -582,6 +582,9 @@ spec:
                     default: 180000
                     minimum: 1
                     type: integer
+                  skipConnTrackDstCIDRs:
+                    default: ""
+                    type: string
                   tunnelType:
                     default: geneve
                     enum:
@@ -606,8 +609,6 @@ spec:
                         default: ovn-vlan
                         type: string
                     type: object
-                  skipConnTrackDstCIDRs:
-                    type: string
                 type: object
               openVSwitchDir:
                 default: /etc/origin/openvswitch
