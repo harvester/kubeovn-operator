@@ -77,8 +77,7 @@ spec:
     ovn-northd-leader: "true"
   sessionAffinity: None`
 
-	kube_ovn_cni_service = `
-kind: Service
+	kube_ovn_cni_service = `kind: Service
 apiVersion: v1
 metadata:
   name: kube-ovn-cni
