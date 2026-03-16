@@ -47,11 +47,12 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	nodeObj := &corev1.Node{}
 	err := r.Get(ctx, req.NamespacedName, nodeObj)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			r.Log.WithValues("name", req.Name).Info("node not found")
-			return ctrl.Result{}, nil
-		}
+	if apierrors.IsNotFound(err) {
+		r.Log.WithValues("name", req.Name).Info("node not found")
+		return ctrl.Result{}, nil
+	} else if err != nil {
+		r.Log.WithValues("name", req.Name).Error(err, "error fetching object")
+		return ctrl.Result{}, err
 	}
 
 	node := nodeObj.DeepCopy()
@@ -71,8 +72,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if node.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer) {
-			controllerutil.AddFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer)
+		if controllerutil.AddFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer) {
 			return ctrl.Result{}, r.Patch(ctx, node, client.MergeFrom(nodeObj))
 		}
 		return ctrl.Result{}, nil
@@ -120,8 +120,7 @@ func (r *NodeReconciler) reconcileNodeDeletion(ctx context.Context, config *kube
 	}
 	// perform ovn northbound and southbound db cleanup operations
 	// remove finalizer to allow node to be cleaned up
-	if controllerutil.ContainsFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer) {
-		controllerutil.RemoveFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer)
+	if controllerutil.RemoveFinalizer(node, kubeovniov1.KubeOVNNodeFinalizer) {
 		return ctrl.Result{}, r.Patch(ctx, node, client.MergeFrom(nodeObj))
 	}
 	return ctrl.Result{}, nil

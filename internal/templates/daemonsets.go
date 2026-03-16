@@ -563,6 +563,7 @@ spec:
                 {{- if not .Values.disableModulesManagement }}
                 - SYS_MODULE
                 {{- end }}
+                - NET_RAW
                 - SYS_NICE
                 - SYS_ADMIN
           env:
