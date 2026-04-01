@@ -763,7 +763,10 @@ spec:
                   app: kube-ovn-webhook
               topologyKey: kubernetes.io/hostname
       serviceAccountName: ovn
-      hostNetwork: true
+      automountServiceAccountToken: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: kube-ovn-webhook
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
