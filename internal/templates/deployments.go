@@ -308,6 +308,9 @@ spec:
           - --enable-lb={{- .Values.components.enableLB }}
           - --enable-np={{- .Values.components.enableNP }}
           - --enable-eip-snat={{- .Values.networking.enableEIPSNAT }}
+          {{- if .Values.networking.externalGatewayConfigNS }}
+          - --external-gateway-config-ns={{- .Values.networking.externalGatewayConfigNS }}
+          {{- end }}
           - --enable-external-vpc={{- .Values.components.enableExternalVPC }}
           - --enable-ecmp={{- .Values.networking.enableECMP }}
           - --logtostderr=false

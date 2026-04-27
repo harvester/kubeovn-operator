@@ -65,7 +65,7 @@ type ConfigurationSpec struct {
 	HugepageSizeType string `json:"hugepageSizeType,omitempty"`
 	// +kubebuilder:default:="1Gi"
 	HugePages resource.Quantity `json:"hugePages,omitempty"`
-	// +kubebuilder:default:="v1.15.0-dpdk"
+	// +kubebuilder:default:="v1.16.1-dpdk"
 	DPDKImageTag string `json:"dpdkImageTag,omitempty"`
 	// +kubebuilder:default:="1000m"
 	DPDKCPU resource.Quantity `json:"dpdkCPU,omitempty"`
@@ -173,6 +173,8 @@ type NetworkingSpec struct {
 	EnableCompact *bool `json:"enableCompact,omitempty"`
 	// +kubebuilder:default:=""
 	SkipConnTrackDstCIDRs string `json:"skipConnTrackDstCIDRs,omitempty"`
+	// +kubebuilder:default:=""
+	ExternalGatewayConfigNS string `json:"externalGatewayConfigNS,omitempty"`
 }
 
 type VlanSpec struct {

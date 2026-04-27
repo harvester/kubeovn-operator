@@ -39,8 +39,8 @@ var (
 			Memory: resource.MustParse("200Mi"),
 		},
 		Limits: kubeovnv1.CPUMemSpec{
-			CPU:    resource.MustParse("3"),
-			Memory: resource.MustParse("4Gi"),
+			CPU:              resource.MustParse("3"),
+			Memory:           resource.MustParse("4Gi"),
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
@@ -50,8 +50,8 @@ var (
 			Memory: resource.MustParse("200Mi"),
 		},
 		Limits: kubeovnv1.CPUMemSpec{
-			CPU:    resource.MustParse("2"),
-			Memory: resource.MustParse("1000Mi"),
+			CPU:              resource.MustParse("2"),
+			Memory:           resource.MustParse("1000Mi"),
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
@@ -61,8 +61,8 @@ var (
 			Memory: resource.MustParse("200Mi"),
 		},
 		Limits: kubeovnv1.CPUMemSpec{
-			CPU:    resource.MustParse("1000m"),
-			Memory: resource.MustParse("1Gi"),
+			CPU:              resource.MustParse("1000m"),
+			Memory:           resource.MustParse("1Gi"),
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
@@ -72,8 +72,8 @@ var (
 			Memory: resource.MustParse("100Mi"),
 		},
 		Limits: kubeovnv1.CPUMemSpec{
-			CPU:    resource.MustParse("1000m"),
-			Memory: resource.MustParse("1Gi"),
+			CPU:              resource.MustParse("1000m"),
+			Memory:           resource.MustParse("1Gi"),
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
@@ -83,8 +83,8 @@ var (
 			Memory: resource.MustParse("100Mi"),
 		},
 		Limits: kubeovnv1.CPUMemSpec{
-			CPU:    resource.MustParse("200m"),
-			Memory: resource.MustParse("400Mi"),
+			CPU:              resource.MustParse("200m"),
+			Memory:           resource.MustParse("400Mi"),
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
@@ -94,8 +94,8 @@ var (
 			Memory: resource.MustParse("200Mi"),
 		},
 		Limits: kubeovnv1.CPUMemSpec{
-			CPU:    resource.MustParse("200m"),
-			Memory: resource.MustParse("200Mi"),
+			CPU:              resource.MustParse("200m"),
+			Memory:           resource.MustParse("200Mi"),
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
