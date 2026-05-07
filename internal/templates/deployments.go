@@ -40,6 +40,7 @@ spec:
                 matchLabels:
                   app: ovn-central
               topologyKey: kubernetes.io/hostname
+        {{- include "kubeovn.masterNodeAffinity" . | nindent 8 }}      
       priorityClassName: system-cluster-critical
       serviceAccountName: ovn-ovs
       automountServiceAccountToken: true
@@ -156,9 +157,6 @@ spec:
             timeoutSeconds: 45
       nodeSelector:
         kubernetes.io/os: "linux"
-        {{- with splitList "=" .Values.masterNodesLabel }}
-        {{ index . 0 }}: "{{ if eq (len .) 2 }}{{ index . 1 }}{{ end }}"
-        {{- end }}
       volumes:
         - name: host-run-ovn
           hostPath:
@@ -462,6 +460,7 @@ spec:
                 matchLabels:
                   app: ovn-ic-controller
               topologyKey: kubernetes.io/hostname
+        {{- include "kubeovn.masterNodeAffinity" . | nindent 8 }}      
       priorityClassName: system-cluster-critical
       serviceAccountName: ovn
       automountServiceAccountToken: true
@@ -538,9 +537,6 @@ spec:
               name: kube-ovn-log
       nodeSelector:
         kubernetes.io/os: "linux"
-        {{- with splitList "=" .Values.MASTER_NODES_LABEL }}
-        {{ index . 0 }}: "{{ if eq (len .) 2 }}{{ index . 1 }}{{ end }}"
-        {{- end }}
       volumes:
         - name: host-run-ovn
           hostPath:
@@ -597,6 +593,7 @@ spec:
                 matchLabels:
                   app: kube-ovn-monitor
               topologyKey: kubernetes.io/hostname
+        {{- include "kubeovn.masterNodeAffinity" . | nindent 8 }}      
       priorityClassName: system-cluster-critical
       serviceAccountName: kube-ovn-app
       automountServiceAccountToken: true
@@ -710,9 +707,6 @@ spec:
             timeoutSeconds: 5
       nodeSelector:
         kubernetes.io/os: "linux"
-        {{- with splitList "=" .Values.masterNodesLabel }}
-        {{ index . 0 }}: "{{ if eq (len .) 2 }}{{ index . 1 }}{{ end }}"
-        {{- end }}
       volumes:
         - name: host-run-ovn
           hostPath:
@@ -765,6 +759,7 @@ spec:
                 matchLabels:
                   app: kube-ovn-webhook
               topologyKey: kubernetes.io/hostname
+      priorityClassName: system-cluster-critical        
       serviceAccountName: ovn
       automountServiceAccountToken: true
       securityContext:

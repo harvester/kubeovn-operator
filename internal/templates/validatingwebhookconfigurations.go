@@ -52,6 +52,12 @@ webhooks:
         - iptables-dnat-rules
         - iptables-snat-rules
         - iptables-fip-rules
+  objectSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values:
+          - kube-ovn-webhook     
   failurePolicy: Ignore
   admissionReviewVersions: ["v1", "v1beta1"]
   sideEffects: None
