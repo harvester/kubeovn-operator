@@ -59,6 +59,18 @@ func GenerateObjects(templates []string, config *ovnoperatorv1.Configuration, ob
 		return nil, fmt.Errorf("failed to set field MASTER_NODES in values map: %v", err)
 	}
 
+	// generate master node affinity and add to values so that it can be included in the templates where needed
+	masterNodeAffinity, err := generateMasterNodeAffinity(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate master node affinity: %v", err)
+	}
+	if masterNodeAffinity != "" {
+		err = unstructured.SetNestedField(valsObj, masterNodeAffinity, "kubeovn", "masterNodeAffinity")
+		if err != nil {
+			return nil, fmt.Errorf("failed to set field masterNodeAffinity in values map: %v", err)
+		}
+	}
+
 	for _, sourceTemplate := range templates {
 		returnedObject, err := generateObject(sourceTemplate, valsObj, object, restConfig)
 		if err != nil {
@@ -215,6 +227,44 @@ func GenerateChassisCleanupScript(hostname string) (string, error) {
 	err = tmpl.Execute(&result, values)
 	if err != nil {
 		return "", fmt.Errorf("error during template execution %s using values %v: %v", templates.CleanupChassis, values, err)
+	}
+	return result.String(), nil
+}
+
+func generateMasterNodeAffinity(config *ovnoperatorv1.Configuration) (string, error) {
+
+	// if there are no MasterNodeLabels return empty string
+	if config.Spec.MasterNodesLabel == "" {
+		return "", nil
+	}
+
+	podAffinityTemplate := `{{- $parts := splitList "=" .Spec.MasterNodesLabel -}}
+{{- $key := index $parts 0 -}}
+{{- $val := "" -}}
+{{- if gt (len $parts) 1 -}}
+  {{- $val = join "=" (rest $parts) -}}
+{{- end -}}
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: {{ $key }}
+          {{- if ne $val "" }}
+            operator: In
+            values:
+              - {{ $val | quote }}
+          {{- else }}
+            operator: Exists
+          {{- end }}`
+	f := sprig.TxtFuncMap()
+	masterNodeAffinityTmpl, err := template.New("masterNodeAffinity").Funcs(f).Parse(podAffinityTemplate)
+	if err != nil {
+		return "", fmt.Errorf("error parsing master node affinity template: %v", err)
+	}
+	var result bytes.Buffer
+	err = masterNodeAffinityTmpl.Execute(&result, config)
+	if err != nil {
+		return "", fmt.Errorf("error during master node affinity template execution using config %v: %v", config, err)
 	}
 	return result.String(), nil
 }

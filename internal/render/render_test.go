@@ -42,3 +42,24 @@ func Test_CleanupRendering(t *testing.T) {
 		assert.NoError(err)
 	}
 }
+
+func Test_MasterNodeAffinityRendering(t *testing.T) {
+	assert := require.New(t)
+	config := &ovnoperatorv1.Configuration{
+		Spec: ovnoperatorv1.ConfigurationSpec{
+			MasterNodesLabel: "node-role.kubernetes.io/control-plane=true",
+		},
+	}
+	result, err := generateMasterNodeAffinity(config)
+	assert.NoError(err)
+	assert.Contains(result, "key: node-role.kubernetes.io/control-plane")
+
+}
+
+func Test_MasterNodeAffinityRenderingWithEmptyLabel(t *testing.T) {
+	assert := require.New(t)
+	config := &ovnoperatorv1.Configuration{}
+	result, err := generateMasterNodeAffinity(config)
+	assert.NoError(err)
+	assert.Len(result, 0, "expected empty result when MasterNodesLabel is not set")
+}
