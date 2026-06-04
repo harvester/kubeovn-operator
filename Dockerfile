@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM registry.suse.com/bci/golang:1.25.7 AS builder
+FROM registry.suse.com/bci/golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
