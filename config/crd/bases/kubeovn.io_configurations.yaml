@@ -143,6 +143,12 @@ spec:
                   setVLANTxOff:
                     default: false
                     type: boolean
+                  u2oFeatures:
+                    properties:
+                      overlayOnlyRouting:
+                        default: false
+                        type: boolean
+                    type: object
                   u2oInterconnection:
                     default: false
                     type: boolean
