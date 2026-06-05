@@ -1,8 +1,8 @@
 module github.com/harvester/kubeovn-operator
 
-go 1.25.7
+go 1.26
 
-godebug default=go1.25.7
+godebug default=go1.26.3
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
