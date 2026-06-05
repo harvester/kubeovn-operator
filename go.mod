@@ -1,8 +1,8 @@
 module github.com/harvester/kubeovn-operator
 
-go 1.25.7
+go 1.26
 
-godebug default=go1.25.7
+godebug default=go1.26.3
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
@@ -190,4 +190,8 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.20.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
+)
+
+replace (
+	k8s.io/kubelet => github.com/k3s-io/kubernetes/staging/src/k8s.io/kubelet v1.21.0-k3s1
 )

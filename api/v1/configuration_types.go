@@ -213,7 +213,8 @@ type ComponentSpec struct {
 	// +kubebuilder:default:=true
 	EnableBindLocalIP *bool `json:"enableBindLocalIP,omitempty"`
 	// +kubebuilder:default:=false
-	SecureServing **bool `json:"secureServing,omitempty"`
+	SecureServing *bool       `json:"secureServing,omitempty"`
+	U2OFeatures   U2OFeatures `json:"u2oFeatures,omitempty"`
 	// +kubebuilder:default:=false
 	U2OInterconnection *bool `json:"u2oInterconnection,omitempty"`
 	// +kubebuilder:default:=false
@@ -242,6 +243,11 @@ type ComponentSpec struct {
 	EnableDNSNameResolver *bool `json:"enableDNSNameResolver,omitempty"`
 	// +kubebuilder:default:=false
 	EnableOVNLBPreferLocal *bool `json:"enableOVNLBPreferLocal,omitempty"`
+}
+
+type U2OFeatures struct {
+	// +kubebuilder:default:=false
+	OverlayOnlyRouting bool `json:"overlayOnlyRouting,omitempty"`
 }
 
 type NetworkStackSpec struct {
