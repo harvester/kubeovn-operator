@@ -3,6 +3,7 @@ FROM registry.suse.com/bci/golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
+ENV GOTOOLCHAIN=auto
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
