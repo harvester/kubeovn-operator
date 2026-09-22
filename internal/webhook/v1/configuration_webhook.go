@@ -33,7 +33,7 @@ import (
 // log is for logging in this package.
 var (
 	configurationlog              = logf.Log.WithName("configuration-resource")
-	ovnCentralDefaultResourceSpec = kubeovnv1.ResourceSpec{
+	ovnCentralDefaultResourceSpec = kubeovnv1.OVNCentralResourceSpec{
 		Requests: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("300m"),
 			Memory: resource.MustParse("200Mi"),
@@ -55,7 +55,7 @@ var (
 			EphemeralStorage: resource.MustParse("1Gi"),
 		},
 	}
-	kubeOVNControllerDefaultResourceSpec = kubeovnv1.ResourceSpec{
+	kubeOVNControllerDefaultResourceSpec = kubeovnv1.OVNControllerResourceSpec{
 		Requests: kubeovnv1.CPUMemSpec{
 			CPU:    resource.MustParse("200m"),
 			Memory: resource.MustParse("200Mi"),
@@ -137,12 +137,68 @@ func (d *ConfigurationCustomDefaulter) Default(ctx context.Context, obj runtime.
 }
 
 func (d *ConfigurationCustomDefaulter) ApplyConfigurationDefaults(config *kubeovnv1.Configuration) {
-	config.Spec.OVNCentral = applyDefaults(config.Spec.OVNCentral, ovnCentralDefaultResourceSpec)
+	config.Spec.OVNCentral = applyDefaultsForOVNCentral(config.Spec.OVNCentral, ovnCentralDefaultResourceSpec)
 	config.Spec.OVSOVN = applyDefaults(config.Spec.OVSOVN, ovsOVNDefaultResourceSpec)
-	config.Spec.KubeOVNController = applyDefaults(config.Spec.KubeOVNController, kubeOVNControllerDefaultResourceSpec)
+	config.Spec.KubeOVNController = applyDefaultsForOVNController(config.Spec.KubeOVNController, kubeOVNControllerDefaultResourceSpec)
 	config.Spec.KubeOVNCNI = applyDefaults(config.Spec.KubeOVNCNI, kubeOVNCNIDefaultResourceSpec)
 	config.Spec.KubeOVNPinger = applyDefaults(config.Spec.KubeOVNPinger, kubeOVNPingerDefaultResourceSpec)
 	config.Spec.KubeOVNMonitor = applyDefaults(config.Spec.KubeOVNMonitor, kubeOVNMonitorDefaultResourceSpec)
+}
+
+// applyDefaults will apply baseline defaults for resource specs to configuration
+func applyDefaultsForOVNCentral(resource, defaultValues kubeovnv1.OVNCentralResourceSpec) kubeovnv1.OVNCentralResourceSpec {
+	if resource.Requests.CPU.IsZero() {
+		resource.Requests.CPU = defaultValues.Requests.CPU
+	}
+
+	if resource.Requests.Memory.IsZero() {
+		resource.Requests.Memory = defaultValues.Requests.Memory
+	}
+
+	if resource.Limits.CPU.IsZero() {
+		resource.Limits.CPU = defaultValues.Limits.CPU
+	}
+
+	if resource.Limits.Memory.IsZero() {
+		resource.Limits.Memory = defaultValues.Limits.Memory
+	}
+
+	if resource.Requests.EphemeralStorage.IsZero() {
+		resource.Requests.EphemeralStorage = defaultValues.Requests.EphemeralStorage
+	}
+
+	if resource.Limits.EphemeralStorage.IsZero() {
+		resource.Limits.EphemeralStorage = defaultValues.Limits.EphemeralStorage
+	}
+	return resource
+}
+
+// applyDefaults will apply baseline defaults for resource specs to configuration
+func applyDefaultsForOVNController(resource, defaultValues kubeovnv1.OVNControllerResourceSpec) kubeovnv1.OVNControllerResourceSpec {
+	if resource.Requests.CPU.IsZero() {
+		resource.Requests.CPU = defaultValues.Requests.CPU
+	}
+
+	if resource.Requests.Memory.IsZero() {
+		resource.Requests.Memory = defaultValues.Requests.Memory
+	}
+
+	if resource.Limits.CPU.IsZero() {
+		resource.Limits.CPU = defaultValues.Limits.CPU
+	}
+
+	if resource.Limits.Memory.IsZero() {
+		resource.Limits.Memory = defaultValues.Limits.Memory
+	}
+
+	if resource.Requests.EphemeralStorage.IsZero() {
+		resource.Requests.EphemeralStorage = defaultValues.Requests.EphemeralStorage
+	}
+
+	if resource.Limits.EphemeralStorage.IsZero() {
+		resource.Limits.EphemeralStorage = defaultValues.Limits.EphemeralStorage
+	}
+	return resource
 }
 
 // applyDefaults will apply baseline defaults for resource specs to configuration

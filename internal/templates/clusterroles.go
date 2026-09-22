@@ -109,6 +109,27 @@ rules:
       - list
       - watch
   - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - monitoring.coreos.com
+    resources:
+      - servicemonitors
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+  - apiGroups:
       - apps
     resources:
       - daemonsets
@@ -153,6 +174,14 @@ rules:
       - discovery.k8s.io
     resources:
       - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - metallb.io
+    resources:
+      - servicel2statuses
     verbs:
       - get
       - list
@@ -238,6 +267,14 @@ rules:
     verbs:
     - get
     - create
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    resourceNames:
+    - kube-ovn-tls
+    verbs:
+    - update
   - apiGroups:
     - certificates.k8s.io
     resourceNames:
