@@ -10,12 +10,22 @@ spec:
     cniConfigDir: /etc/cni/net.d
     cniConfigPriority: "90"
     localBinDir: /usr/local/bin
+    mountCNIConfDir: /etc/cni/net.d
+    nonPrimaryCNI: true
+  ovnCentralMode: cluster
+  installMode: full
+  externalOvnCentral:
+    nbEndpoint: ""
+    sbEndpoint: ""
+    nbPort: 6641
+    sbPort: 6642
   components:
     OVSDBConTimeout: 3
     OVSDBInactivityTimeout: 10
     checkGateway: true
     enableANP: false
     enableBindLocalIP: true
+    enableDNSNameResolver: false
     enableExternalVPC: true
     enableIC: false
     enableKeepVMIP: true
@@ -25,17 +35,22 @@ spec:
     enableNATGateway: true
     enableNP: true
     enableOVNIPSec: false
+    enableOVNLBPreferLocal: false
     enableTProxy: false
     hardwareOffload: false
     logicalGateway: false
     lsCtSkipOstLportIPS: true
     lsDnatModDlDst: true
+    npEnforcement: standard
     secureServing: false
     setVLANTxOff: false
+    u2oFeatures:
+      overlayOnlyRouting: false
     u2oInterconnection: false
   debug:
     mirrorInterface: mirror0
   dpdkCPU: "0"
+  dpdkImageTag: v1.16.4-dpdk
   dpdkMEMORY: "0"
   dualStack:
     joinCIDR: fd00:100:64::/112
@@ -50,6 +65,8 @@ spec:
         dpdkRepository: kube-ovn-dpdk
         repository: kube-ovn
         vpcRepository: vpc-nat-gateway
+      natgateway:
+        repository: vpc-nat-gateway
     registry:
       address: docker.io/kubeovn
   hugePages: "0"
@@ -59,9 +76,9 @@ spec:
     joinCIDR: 100.64.0.0/16
     pingerExternalAddress: 1.1.1.1
     pingerExternalDomain: google.com.
-    podCIDR: 10.52.0.0/16
-    podGateway: 10.52.0.1
-    serviceCIDR: 10.53.0.0/16
+    podCIDR: 10.54.0.0/16
+    podGateway: 10.54.0.1
+    serviceCIDR: 10.55.0.0/16
   ipv6:
     joinCIDR: fd00:100:64::/112
     pingerExternalAddress: 2606:4700:4700::1111
@@ -71,32 +88,47 @@ spec:
     serviceCIDR: fd00:10:96::/112
   kubeOvnCNI:
     requests:
-      cpu: "100m"
-      memory: "100Mi"
+      cpu: 200m
+      ephemeralStorage: "0"
+      memory: 100Mi
     limits:
       cpu: "1"
-      memory: "1Gi"
+      ephemeralStorage: 1Gi
+      memory: 1Gi
   kubeOvnController:
+    leaderElection:
+      # Duration non-leader candidates wait after observing a renewal before attempting to acquire leadership. Empty uses the controller default of 30s.
+      leaseDuration: ""
+      # Duration the acting leader retries refreshing leadership before giving up. Empty uses the controller default of 20s.
+      renewDeadline: ""
+      # Duration leader election clients wait between attempts. Empty uses the controller default of 6s.
+      retryPeriod: ""
     requests:
-      cpu: "200m"
-      memory: "200Mi"
+      cpu: 200m
+      ephemeralStorage: "0"
+      memory: 100Mi
     limits:
       cpu: "1"
-      memory: "1Gi"
+      ephemeralStorage: 1Gi
+      memory: 1Gi
   kubeOvnMonitor:
     requests:
-      cpu: "200m"
-      memory: "200Mi"
+      cpu: 200m
+      ephemeralStorage: "0"
+      memory: 200Mi
     limits:
-      cpu: "200m"
-      memory: "200Mi"
+      cpu: 200m
+      ephemeralStorage: 1Gi
+      memory: 200Mi
   kubeOvnPinger:
     requests:
-      cpu: "100m"
-      memory: "100Mi"
+      cpu: 200m
+      ephemeralStorage: "0"
+      memory: 100Mi
     limits:
-      cpu: "200m"
-      memory: "400Mi"
+      cpu: 200m
+      ephemeralStorage: 1Gi
+      memory: 400Mi
   kubeletConfig:
     kubeletDir: /var/lib/kubelet
   logConfig:
@@ -125,22 +157,97 @@ spec:
       providerName: provider
       vlanId: 1
       vlanName: ovn-vlan
+    tlsMinVersion: ""
+    tlsMaxVersion: ""
+    tlsCipherSuites: []
+  aclSampling:
+    enabled: false
+    setID: 142
+    localGroupID: 142
+    appIDNew: 102
+    appIDEstablished: 103
+    collectorIDAllow: 1
+    collectorIDDefaultDeny: 2
+    allowProbabilityPercent: 1
+    defaultDenyProbabilityPercent: 100
   openVSwitchDir: /var/lib/rancher/origin/openvswitch
   ovnCentral:
-    requests:
-      cpu: "300m"
-      memory: "200Mi"
     limits:
       cpu: "3"
-      memory: "4Gi"
+      ephemeralStorage: 1Gi
+      memory: 4Gi
+    requests:
+      cpu: 300m
+      ephemeralStorage: "0"
+      memory: 200Mi
+    tolerations:
+    - effect: NoSchedule
+      operator: Exists
+    - effect: NoExecute
+      operator: Exists
+    nodeSelector:
+      kubernetes.io/os: "linux"
+    hcp:
+      enabled: false
+      namespace: hcp
+      replicas: 3
+      # OVN NB address used by workload clusters, for example tcp:ovn-nb.example.com:6641.
+      nbAddress: ""
+      # OVN SB address used by workload clusters, for example tcp:ovn-sb.example.com:6642.
+      sbAddress: ""
+      service:
+        type: NodePort
+        nbNodePort: 30641
+        sbNodePort: 30642
+      storage:
+        size: 5Gi
+        storageClassName: ""
+      requests:
+        cpu: "300m"
+        ephemeralStorage: "0"
+        memory: "200Mi"
+      limits:
+        cpu: "3"
+        ephemeralStorage: 1Gi
+        memory: "4Gi"
+    # Persistent storage for the OVN DB files. Only used when OVN_CENTRAL_MODE=single.
+    # The StorageClass should support cross-node attach (e.g. NFS, Ceph RBD, cloud
+    # block storage with attach/detach) if you want ovn-central to drift between
+    # nodes on host failure.
+    storage:
+      storageClassName: ""
+      size: 10Gi
+      accessModes:
+        - ReadWriteOnce
+      # Set existingClaim to skip in-chart PVC creation and point the
+      # Deployment at a PVC the operator manages out-of-band (e.g. via a
+      # storage operator). The value is the name of the existing PVC; the
+      # Deployment's host-config-ovn volume mounts whatever you set here.
+      # Leaving this empty makes the chart create a PVC named
+      # "ovn-central-data" itself.
+      existingClaim: ""
+    # Service exposure for ovn-nb / ovn-sb / ovn-northd. Default ClusterIP is
+    # only reachable from inside the cluster. Switch to LoadBalancer (or
+    # NodePort) to expose the OVN DB to data-plane components running outside
+    # the management cluster — for example a split-cluster topology where
+    # ovn-controller / kube-ovn-cni / kube-ovn-controller run in a separate
+    # tenant cluster and connect back over a stable VIP.
+    service:
+      type: ClusterIP
+      # Optional, only honoured when type=LoadBalancer; provider-dependent.
+      loadBalancerIP: ""
+      # Optional, only honoured when type=LoadBalancer / NodePort.
+      externalTrafficPolicy: ""
   ovnDir: /etc/origin/ovn
   ovsOVN:
     limits:
-      cpu: "0"
-      memory: "0"
+      cpu: "2"
+      ephemeralStorage: 1Gi
+      memory: 1000Mi
     requests:
-      cpu: "0"
-      memory: "0"
+      cpu: 200m
+      ephemeralStorage: "0"
+      memory: 200Mi
   performance:
     gcInterval: 360
     inspectInterval: 20

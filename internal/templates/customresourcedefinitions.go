@@ -5,6 +5,7 @@ var (
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: bgp-confs.kubeovn.io
 spec:
@@ -72,6 +73,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: dnsnameresolvers.kubeovn.io
 spec:
@@ -284,6 +286,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: evpn-confs.kubeovn.io
 spec:
@@ -334,6 +337,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: vpc-dnses.kubeovn.io
 spec:
@@ -453,6 +457,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: switch-lb-rules.kubeovn.io
 spec:
@@ -592,6 +597,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: vpc-nat-gateways.kubeovn.io
 spec:
@@ -2663,6 +2669,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: vpc-egress-gateways.kubeovn.io
 spec:
@@ -2742,13 +2749,27 @@ spec:
                   If not specified, there will be no bandwidth limit.
                 properties:
                   egress:
-                    description: egress bandwidth limit in Mbps
-                    format: int64
-                    type: integer
+                    description: egress bandwidth limit, specified as an integer in
+                      Mbps or a Kubernetes quantity such as 100M or 1Gi in bits per
+                      second
+                    pattern: ^([0-9]+|([0-9]+(\.[0-9]+)?|\.[0-9]+)(M|Mi|G|Gi))$
+                    x-kubernetes-int-or-string: true
+                    x-kubernetes-validations:
+                    - message: integer bandwidth must be between 0 and 9223372036854
+                        Mbps
+                      rule: 'type(self) == int ? self >= 0 && self <= 9223372036854
+                        : true'
                   ingress:
-                    description: ingress bandwidth limit in Mbps
-                    format: int64
-                    type: integer
+                    description: ingress bandwidth limit, specified as an integer
+                      in Mbps or a Kubernetes quantity such as 100M or 1Gi in bits
+                      per second
+                    pattern: ^([0-9]+|([0-9]+(\.[0-9]+)?|\.[0-9]+)(M|Mi|G|Gi))$
+                    x-kubernetes-int-or-string: true
+                    x-kubernetes-validations:
+                    - message: integer bandwidth must be between 0 and 9223372036854
+                        Mbps
+                      rule: 'type(self) == int ? self >= 0 && self <= 9223372036854
+                        : true'
                 type: object
               bfd:
                 description: BFD configuration
@@ -2790,6 +2811,12 @@ spec:
                   optional EVPN configuration name
                   it references a cluster-scoped EvpnConf resource
                 type: string
+              externalIPPool:
+                description: |-
+                  optional name of an IPPool resource used to allocate the external IP for the workload
+                  the referenced IPPool's subnet must match the external subnet
+                  mutually exclusive with externalIPs
+                type: string
               externalIPs:
                 description: External IP addresses for the egress gateway
                 items:
@@ -2802,6 +2829,12 @@ spec:
                 description: |-
                   optional image used by the workload
                   if not specified, the default image passed in by kube-ovn-controller will be used
+                type: string
+              internalIPPool:
+                description: |-
+                  optional name of an IPPool resource used to allocate the internal IP for the workload
+                  the referenced IPPool's subnet must match the internal subnet
+                  mutually exclusive with internalIPs
                 type: string
               internalIPs:
                 description: |-
@@ -2887,6 +2920,462 @@ spec:
                       type: object
                   type: object
                 type: array
+              observability:
+                description: Optional observability configuration for the gateway
+                  workload.
+                properties:
+                  conntrack:
+                    description: VpcEgressGatewayConntrackObservability configures
+                      conntrack metrics and flow logs.
+                    properties:
+                      log:
+                        description: VpcEgressGatewayConntrackLog configures JSON
+                          Lines flow logging to stdout.
+                        properties:
+                          enabled:
+                            type: boolean
+                          events:
+                            description: flow lifecycle events to log; start and end
+                              are used when omitted
+                            items:
+                              enum:
+                              - start
+                              - end
+                              type: string
+                            maxItems: 2
+                            type: array
+                            x-kubernetes-list-type: set
+                          filters:
+                            description: VpcEgressGatewayConntrackLogFilters selects
+                              flow records. Exclude rules take precedence.
+                            properties:
+                              exclude:
+                                items:
+                                  description: VpcEgressGatewayConntrackLogFilter
+                                    matches all configured fields in a rule.
+                                  properties:
+                                    addressFamilies:
+                                      items:
+                                        enum:
+                                        - ipv4
+                                        - ipv6
+                                        type: string
+                                      maxItems: 2
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                    natTypes:
+                                      items:
+                                        enum:
+                                        - snat
+                                        - dnat
+                                        - snat_dnat
+                                        type: string
+                                      maxItems: 3
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                    original:
+                                      description: VpcEgressGatewayConntrackTupleFilter
+                                        matches tuple addresses and ports.
+                                      properties:
+                                        destinationCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        destinationPorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                        sourceCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        sourcePorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                      type: object
+                                    protocols:
+                                      items:
+                                        enum:
+                                        - tcp
+                                        - udp
+                                        - sctp
+                                        - icmp
+                                        - icmpv6
+                                        - other
+                                        type: string
+                                      maxItems: 6
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                    translated:
+                                      description: VpcEgressGatewayConntrackTupleFilter
+                                        matches tuple addresses and ports.
+                                      properties:
+                                        destinationCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        destinationPorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                        sourceCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        sourcePorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                      type: object
+                                  type: object
+                                maxItems: 64
+                                type: array
+                              include:
+                                items:
+                                  description: VpcEgressGatewayConntrackLogFilter
+                                    matches all configured fields in a rule.
+                                  properties:
+                                    addressFamilies:
+                                      items:
+                                        enum:
+                                        - ipv4
+                                        - ipv6
+                                        type: string
+                                      maxItems: 2
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                    natTypes:
+                                      items:
+                                        enum:
+                                        - snat
+                                        - dnat
+                                        - snat_dnat
+                                        type: string
+                                      maxItems: 3
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                    original:
+                                      description: VpcEgressGatewayConntrackTupleFilter
+                                        matches tuple addresses and ports.
+                                      properties:
+                                        destinationCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        destinationPorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                        sourceCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        sourcePorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                      type: object
+                                    protocols:
+                                      items:
+                                        enum:
+                                        - tcp
+                                        - udp
+                                        - sctp
+                                        - icmp
+                                        - icmpv6
+                                        - other
+                                        type: string
+                                      maxItems: 6
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                    translated:
+                                      description: VpcEgressGatewayConntrackTupleFilter
+                                        matches tuple addresses and ports.
+                                      properties:
+                                        destinationCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        destinationPorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                        sourceCIDRs:
+                                          items:
+                                            type: string
+                                          maxItems: 64
+                                          type: array
+                                          x-kubernetes-list-type: set
+                                        sourcePorts:
+                                          items:
+                                            description: VpcEgressGatewayPortRange
+                                              is an inclusive transport port range.
+                                            properties:
+                                              end:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                              start:
+                                                format: int32
+                                                maximum: 65535
+                                                minimum: 0
+                                                type: integer
+                                            type: object
+                                            x-kubernetes-validations:
+                                            - message: start must not be greater than
+                                                end
+                                              rule: self.start <= self.end
+                                          maxItems: 64
+                                          type: array
+                                      type: object
+                                  type: object
+                                maxItems: 64
+                                type: array
+                            type: object
+                          rateLimit:
+                            description: VpcEgressGatewayConntrackLogRateLimit limits
+                              flow log records per gateway pod.
+                            properties:
+                              burst:
+                                format: int32
+                                maximum: 1000000
+                                minimum: 1
+                                type: integer
+                              recordsPerSecond:
+                                format: int32
+                                maximum: 100000
+                                minimum: 1
+                                type: integer
+                            type: object
+                        type: object
+                      metrics:
+                        description: VpcEgressGatewayObservabilityFeature enables
+                          an observability collector.
+                        properties:
+                          enabled:
+                            type: boolean
+                        type: object
+                    type: object
+                  interfaceMetrics:
+                    description: VpcEgressGatewayObservabilityFeature enables an observability
+                      collector.
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
+                  resources:
+                    description: Compute resources required by the observability sidecar.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  serviceMonitor:
+                    description: VpcEgressGatewayServiceMonitor configures metadata
+                      for the per-gateway ServiceMonitor.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                type: object
               policies:
                 description: |-
                   egress policies
@@ -3140,6 +3629,15 @@ spec:
             required:
             - externalSubnet
             type: object
+            x-kubernetes-validations:
+            - fieldPath: .internalIPPool
+              message: internalIPs and internalIPPool are mutually exclusive
+              rule: '!(has(self.internalIPs) && size(self.internalIPs) != 0 && has(self.internalIPPool)
+                && size(self.internalIPPool) > 0)'
+            - fieldPath: .externalIPPool
+              message: externalIPs and externalIPPool are mutually exclusive
+              rule: '!(has(self.externalIPs) && size(self.externalIPs) != 0 && has(self.externalIPPool)
+                && size(self.externalIPPool) > 0)'
           status:
             properties:
               conditions:
@@ -3239,6 +3737,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: iptables-eips.kubeovn.io
 spec:
@@ -3375,6 +3874,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: iptables-fip-rules.kubeovn.io
 spec:
@@ -3505,6 +4005,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: iptables-dnat-rules.kubeovn.io
 spec:
@@ -3662,6 +4163,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: iptables-snat-rules.kubeovn.io
 spec:
@@ -3792,6 +4294,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: ovn-eips.kubeovn.io
 spec:
@@ -3934,6 +4437,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: ovn-fips.kubeovn.io
 spec:
@@ -4091,6 +4595,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: ovn-snat-rules.kubeovn.io
 spec:
@@ -4233,6 +4738,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: ovn-dnat-rules.kubeovn.io
 spec:
@@ -4411,6 +4917,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: vpcs.kubeovn.io
 spec:
@@ -4703,6 +5210,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: ips.kubeovn.io
 spec:
@@ -4811,6 +5319,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: vips.kubeovn.io
 spec:
@@ -4965,6 +5474,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: subnets.kubeovn.io
 spec:
@@ -5406,6 +5916,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: ippools.kubeovn.io
 spec:
@@ -5561,6 +6072,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: vlans.kubeovn.io
 spec:
@@ -5681,6 +6193,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: provider-networks.kubeovn.io
 spec:
@@ -5886,6 +6399,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: security-groups.kubeovn.io
 spec:
@@ -6044,6 +6558,7 @@ spec:
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    helm.sh/resource-policy: keep
     controller-gen.kubebuilder.io/version: v0.20.1
   name: qos-policies.kubeovn.io
 spec:

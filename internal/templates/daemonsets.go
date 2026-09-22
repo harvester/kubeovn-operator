@@ -61,8 +61,16 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.ovnSbAddress" . }}"
+            {{- else if eq .Values.installMode "dataPlaneOnly" }}
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.externalOvnSbAddress" . }}"
+            {{- else }}
             - name: OVN_DB_IPS
               value: "{{ .Values.MASTER_NODES | default (include "kubeovn.nodeIPs" .) }}"
+            {{- end }}
             - name: OVN_REMOTE_PROBE_INTERVAL
               value: "{{ .Values.networking.ovnRemoteProbeInterval }}"
             - name: OVN_REMOTE_OPENFLOW_INTERVAL
@@ -294,9 +302,15 @@ spec:
           - --enable-tproxy={{ .Values.components.enableTProxy }}
           - --ovs-vsctl-concurrency={{ .Values.performance.ovsVSCtlConcurrency }}
           - --secure-serving={{- .Values.components.secureServing }}
+          {{- if or .Values.networking.tlsMinVersion .Values.networking.tlsMaxVersion .Values.networking.tlsCipherSuites }}
+          {{- include "kubeovn.componentTLSArgs" . | nindent 10 }}
+          {{- end }}
           - --enable-ovn-ipsec={{- .Values.components.enableOVNIPSec }}
           - --set-vxlan-tx-off={{- .Values.components.setVLANTxOff }}
           - --non-primary-cni-mode={{- .Values.cniConf.nonPrimaryCNI }}
+          - --enable-acl-sampling={{- .Values.aclSampling.enabled }}
+          - --acl-sampling-set-id={{- .Values.aclSampling.setID }}
+          - --acl-sampling-local-group-id={{- .Values.aclSampling.localGroupID }}
         securityContext:
           runAsUser: 0
           privileged: false
@@ -583,8 +597,18 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+                        {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.ovnSbAddress" . }}"
+            {{- else if eq .Values.installMode "dataPlaneOnly" }}
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.externalOvnSbAddress" . }}"
+            {{- else }}
             - name: OVN_DB_IPS
-              value: "{{ .Values.MASTER_NODES | default (include "kubeovn.nodeIPs" .) }}"
+              value: "{{ include "kubeovn.ovnCentralNodeIPs" . }}"
+            - name: KUBE_OVN_SB_PORT
+              value: "{{ include "kubeovn.ovnSbPort" . }}"
+            {{- end }}
             - name: OVN_REMOTE_PROBE_INTERVAL
               value: "{{ .Values.networking.ovnRemoteProbeInterval }}"
             - name: OVN_REMOTE_OPENFLOW_INTERVAL

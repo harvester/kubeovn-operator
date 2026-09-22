@@ -19,6 +19,7 @@ package v1
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -65,24 +66,51 @@ type ConfigurationSpec struct {
 	HugepageSizeType string `json:"hugepageSizeType,omitempty"`
 	// +kubebuilder:default:="1Gi"
 	HugePages resource.Quantity `json:"hugePages,omitempty"`
-	// +kubebuilder:default:="v1.16.1-dpdk"
+	// +kubebuilder:default:="v1.16.4-dpdk"
 	DPDKImageTag string `json:"dpdkImageTag,omitempty"`
 	// +kubebuilder:default:="1000m"
 	DPDKCPU resource.Quantity `json:"dpdkCPU,omitempty"`
 	// +kubebuilder:default:="2Gi"
 	DPDKMemory resource.Quantity `json:"dpdkMEMORY,omitempty"`
 	// +kubebuilder:default:={requests:{},limits:{}}
-	OVNCentral ResourceSpec `json:"ovnCentral,omitempty"`
+	OVNCentral OVNCentralResourceSpec `json:"ovnCentral,omitempty"`
 	// +kubebuilder:default:={requests:{cpu:"200m",memory:"200Mi"},limits:{cpu:"2", memory:"1000Mi"}}
 	OVSOVN ResourceSpec `json:"ovsOVN,omitempty"`
 	// +kubebuilder:default:={requests:{cpu:"200m",memory:"200Mi"},limits:{cpu:"1",memory:"1000Mi"}}
-	KubeOVNController ResourceSpec `json:"kubeOvnController,omitempty"`
+	KubeOVNController OVNControllerResourceSpec `json:"kubeOvnController,omitempty"`
 	// +kubebuilder:default:={requests:{cpu:"100m",memory:"100Mi"},limits:{cpu:"1",memory:"1000Mi"}}
 	KubeOVNCNI ResourceSpec `json:"kubeOvnCNI,omitempty"`
 	// +kubebuilder:default:={requests:{cpu:"100m",memory:"100Mi"},limits:{cpu:"200m",memory:"400Mi"}}
 	KubeOVNPinger ResourceSpec `json:"kubeOvnPinger,omitempty"`
 	// +kubebuilder:default:={requests:{cpu:"200m",memory:"200Mi"},limits:{cpu:"200m",memory:"200Mi"}}
 	KubeOVNMonitor ResourceSpec `json:"kubeOvnMonitor,omitempty"`
+	// +kubebuilder:default:={}
+	ACLSamplingSpec ACLSamplingSpec `json:"aclSamplingSpec,omitempty"`
+	// +kubebuilder:default:="cluster"
+	// +kubebuilder:validation:Enum=cluster;single
+	OVNCentralMode string `json:"ovnCentralMode,omitempty"`
+
+	// +kubebuilder:default:="full"
+	// +kubebuilder:validation:Enum=full;controlPlaneOnly;dataPlaneOnly
+	InstallMode string `json:"installMode,omitempty"`
+
+	// +kubebuilder:default:={}
+	// When installMode=dataPlaneOnly, the agents and controller cannot rely on a
+	// local ovn-central Service. Set nbEndpoint/sbEndpoint to the addresses that
+	// expose the management cluster's ovn-nb / ovn-sb Services.
+	// +kubebuilder:default:={}
+	ExternalOVNCentral ExternalOVNCentralSpec `json:"externalOvnCentral,omitempty"`
+}
+
+type ExternalOVNCentralSpec struct {
+	// NB endpoint hostname or IP that exposes OVN Northbound DB.
+	NBEndpoint string `json:"nbEndpoint,omitempty"`
+	// SB endpoint hostname or IP that exposes OVN Southbound DB.
+	SBEndpoint string `json:"sbEndpoint,omitempty"`
+	// +kubebuilder:default:=6641
+	NBPort int32 `json:"nbPort,omitempty"`
+	// +kubebuilder:default:=6642
+	SBPort int32 `json:"sbPort,omitempty"`
 }
 
 type GlobalSpec struct {
@@ -175,6 +203,15 @@ type NetworkingSpec struct {
 	SkipConnTrackDstCIDRs string `json:"skipConnTrackDstCIDRs,omitempty"`
 	// +kubebuilder:default:=""
 	ExternalGatewayConfigNS string `json:"externalGatewayConfigNS,omitempty"`
+	// Minimum TLS version for OVN NB/SB database server and kube-ovn secure-serving endpoints.
+	// +kubebuilder:default:=""
+	TLSMinVersion string `json:"tlsMinVersion,omitempty"`
+	// Maximum TLS version for OVN NB/SB database server and kube-ovn secure-serving endpoints.
+	// +kubebuilder:default:=""
+	TLSMaxVersion string `json:"tlsMaxVersion,omitempty"`
+	// Go TLS cipher suite names. OVN DB server only supports suites mapped by dist/images/ovn-db-ssl-options.sh.
+	// +kubebuilder:default:={}
+	TLSCipherSuites []string `json:"tlsCipherSuites,omitempty"`
 }
 
 type VlanSpec struct {
@@ -317,10 +354,120 @@ type ResourceSpec struct {
 	Limits CPUMemSpec `json:"limits,omitempty"`
 }
 
+type OVNCentralResourceSpec struct {
+	// +kubebuilder:default:={cpu:"200m",memory:"200Mi"}
+	Requests CPUMemSpec `json:"requests,omitempty"`
+	// +kubebuilder:default:={cpu:2, memory:"1000Mi", ephemeralStorage:"1Gi"}
+	Limits CPUMemSpec `json:"limits,omitempty"`
+
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +kubebuilder:default:={kubernetes.io/os:"linux"}
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	HCP          HCPSpec           `json:"hcp,omitempty"`
+	// +kubebuilder:default:={}
+	Storage OVNCentralStorageSpec `json:"storage,omitempty"`
+	// +kubebuilder:default:={}
+	Service OVNCentralServiceSpec `json:"service,omitempty"`
+}
+
+type OVNControllerResourceSpec struct {
+	// +kubebuilder:default:={cpu:"200m",memory:"200Mi"}
+	Requests CPUMemSpec `json:"requests,omitempty"`
+	// +kubebuilder:default:={cpu:2, memory:"1000Mi", ephemeralStorage:"1Gi"}
+	Limits CPUMemSpec `json:"limits,omitempty"`
+	// +kubebuilder:default:={}
+	LeaderElection LeaderElectionSpec `json:"leaderElection,omitempty"`
+}
+
+type LeaderElectionSpec struct {
+	// Duration non-leader candidates wait after observing a renewal before attempting to acquire leadership.
+	// Empty uses the controller default of 30s.
+	LeaseDuration string `json:"leaseDuration,omitempty"`
+	// Duration the acting leader retries refreshing leadership before giving up.
+	// Empty uses the controller default of 20s.
+	RenewDeadline string `json:"renewDeadline,omitempty"`
+	// Duration leader election clients wait between attempts.
+	// Empty uses the controller default of 6s.
+	RetryPeriod string `json:"retryPeriod,omitempty"`
+}
+
+type OVNCentralStorageSpec struct {
+	StorageClassName string `json:"storageClassName,omitempty"`
+	// +kubebuilder:default:="10Gi"
+	Size resource.Quantity `json:"size,omitempty"`
+	// +kubebuilder:default:={"ReadWriteOnce"}
+	AccessModes []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
+	// Set existingClaim to skip in-chart PVC creation and use a pre-created PVC.
+	ExistingClaim string `json:"existingClaim,omitempty"`
+}
+
+type OVNCentralServiceSpec struct {
+	// +kubebuilder:default:="ClusterIP"
+	Type corev1.ServiceType `json:"type,omitempty"`
+	// Optional; used when type=LoadBalancer.
+	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
+	// Optional; used when type=LoadBalancer or NodePort.
+	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy `json:"externalTrafficPolicy,omitempty"`
+}
+
+type HCPSpec struct {
+	// +kubebuilder:default:=false
+	Enabled *bool `json:"enabled,omitempty"`
+	// +kubebuilder:default:="hcp"
+	Namespace string `json:"namespace,omitempty"`
+	// +kubebuilder:default:=3
+	// +kubebuilder:validation:Minimum=1
+	Replicas int `json:"replicas,omitempty"`
+	// OVN NB address used by workload clusters, for example tcp:ovn-nb.example.com:6641.
+	NBAddress string `json:"nbAddress,omitempty"`
+	// OVN SB address used by workload clusters, for example tcp:ovn-sb.example.com:6642.
+	SBAddress string `json:"sbAddress,omitempty"`
+	// +kubebuilder:default:={}
+	Service HCPServiceSpec `json:"service,omitempty"`
+	// +kubebuilder:default:={}
+	Storage HCPStorageSpec `json:"storage,omitempty"`
+}
+
+type HCPServiceSpec struct {
+	// +kubebuilder:default:="NodePort"
+	Type corev1.ServiceType `json:"type,omitempty"`
+	// +kubebuilder:default:=30641
+	NBNodePort int32 `json:"nbNodePort,omitempty"`
+	// +kubebuilder:default:=30642
+	SBNodePort int32 `json:"sbNodePort,omitempty"`
+}
+
+type HCPStorageSpec struct {
+	// +kubebuilder:default:="5Gi"
+	Size             resource.Quantity `json:"size,omitempty"`
+	StorageClassName string            `json:"storageClassName,omitempty"`
+}
+
 type CPUMemSpec struct {
 	CPU              resource.Quantity `json:"cpu,omitempty"`
 	Memory           resource.Quantity `json:"memory,omitempty"`
 	EphemeralStorage resource.Quantity `json:"ephemeralStorage,omitempty"`
+}
+
+type ACLSamplingSpec struct {
+	// +kubebuilder:default:=false
+	Enabled *bool `json:"enabled,omitempty"`
+	// +kubebuilder:default:=142
+	SetID int `json:"setID,omitempty"`
+	// +kubebuilder:default:=142
+	LocalGroupID int `json:"localGroupID,omitempty"`
+	// +kubebuilder:default:=102
+	AppIDNew int `json:"appIDNew,omitempty"`
+	// +kubebuilder:default:=103
+	AppIDEstablished int `json:"appIDEstablished,omitempty"`
+	// +kubebuilder:default:=1
+	CollectorIDAllow int `json:"collectorIDAllow,omitempty"`
+	// +kubebuilder:default:=2
+	CollectorIDDefaultDeny int `json:"collectorIDDefaultDeny,omitempty"`
+	// +kubebuilder:default:=1
+	AllowProbabilityPercent int `json:"allowProbabilityPercent,omitempty"`
+	// +kubebuilder:default:=100
+	DefaultDenyProbabilityPercent int `json:"defaultDenyProbabilityPercent,omitempty"`
 }
 
 // ConfigurationStatus defines the observed state of Configuration.

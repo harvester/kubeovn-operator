@@ -39,6 +39,37 @@ spec:
           spec:
             description: ConfigurationSpec defines the desired state of Configuration.
             properties:
+              aclSamplingSpec:
+                default: {}
+                properties:
+                  allowProbabilityPercent:
+                    default: 1
+                    type: integer
+                  appIDEstablished:
+                    default: 103
+                    type: integer
+                  appIDNew:
+                    default: 102
+                    type: integer
+                  collectorIDAllow:
+                    default: 1
+                    type: integer
+                  collectorIDDefaultDeny:
+                    default: 2
+                    type: integer
+                  defaultDenyProbabilityPercent:
+                    default: 100
+                    type: integer
+                  enabled:
+                    default: false
+                    type: boolean
+                  localGroupID:
+                    default: 142
+                    type: integer
+                  setID:
+                    default: 142
+                    type: integer
+                type: object
               cniConf:
                 default: {}
                 properties:
@@ -143,6 +174,12 @@ spec:
                   setVLANTxOff:
                     default: false
                     type: boolean
+                  u2oFeatures:
+                    properties:
+                      overlayOnlyRouting:
+                        default: false
+                        type: boolean
+                    type: object
                   u2oInterconnection:
                     default: false
                     type: boolean
@@ -166,7 +203,7 @@ spec:
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
               dpdkImageTag:
-                default: v1.16.1-dpdk
+                default: v1.16.4-dpdk
                 type: string
               dpdkMEMORY:
                 anyOf:
@@ -202,6 +239,30 @@ spec:
                   serviceCIDR:
                     default: fd00:10:96::/112
                     type: string
+                type: object
+              externalOvnCentral:
+                default: {}
+                description: |-
+                  When installMode=dataPlaneOnly, the agents and controller cannot rely on a
+                  local ovn-central Service. Set nbEndpoint/sbEndpoint to the addresses that
+                  expose the management cluster's ovn-nb / ovn-sb Services.
+                properties:
+                  nbEndpoint:
+                    description: NB endpoint hostname or IP that exposes OVN Northbound
+                      DB.
+                    type: string
+                  nbPort:
+                    default: 6641
+                    format: int32
+                    type: integer
+                  sbEndpoint:
+                    description: SB endpoint hostname or IP that exposes OVN Southbound
+                      DB.
+                    type: string
+                  sbPort:
+                    default: 6642
+                    format: int32
+                    type: integer
                 type: object
               global:
                 properties:
@@ -255,6 +316,13 @@ spec:
                 type: boolean
               imagePullPolicy:
                 default: IfNotPresent
+                type: string
+              installMode:
+                default: full
+                enum:
+                - full
+                - controlPlaneOnly
+                - dataPlaneOnly
                 type: string
               ipv4:
                 default:
@@ -380,6 +448,25 @@ spec:
                     cpu: 200m
                     memory: 200Mi
                 properties:
+                  leaderElection:
+                    default: {}
+                    properties:
+                      leaseDuration:
+                        description: |-
+                          Duration non-leader candidates wait after observing a renewal before attempting to acquire leadership.
+                          Empty uses the controller default of 30s.
+                        type: string
+                      renewDeadline:
+                        description: |-
+                          Duration the acting leader retries refreshing leadership before giving up.
+                          Empty uses the controller default of 20s.
+                        type: string
+                      retryPeriod:
+                        description: |-
+                          Duration leader election clients wait between attempts.
+                          Empty uses the controller default of 6s.
+                        type: string
+                    type: object
                   limits:
                     default:
                       cpu: 2
@@ -649,6 +736,23 @@ spec:
                   skipConnTrackDstCIDRs:
                     default: ""
                     type: string
+                  tlsCipherSuites:
+                    default: []
+                    description: Go TLS cipher suite names. OVN DB server only supports
+                      suites mapped by dist/images/ovn-db-ssl-options.sh.
+                    items:
+                      type: string
+                    type: array
+                  tlsMaxVersion:
+                    default: ""
+                    description: Maximum TLS version for OVN NB/SB database server
+                      and kube-ovn secure-serving endpoints.
+                    type: string
+                  tlsMinVersion:
+                    default: ""
+                    description: Minimum TLS version for OVN NB/SB database server
+                      and kube-ovn secure-serving endpoints.
+                    type: string
                   tunnelType:
                     default: geneve
                     enum:
@@ -682,6 +786,57 @@ spec:
                   limits: {}
                   requests: {}
                 properties:
+                  hcp:
+                    properties:
+                      enabled:
+                        default: false
+                        type: boolean
+                      namespace:
+                        default: hcp
+                        type: string
+                      nbAddress:
+                        description: OVN NB address used by workload clusters, for
+                          example tcp:ovn-nb.example.com:6641.
+                        type: string
+                      replicas:
+                        default: 3
+                        minimum: 1
+                        type: integer
+                      sbAddress:
+                        description: OVN SB address used by workload clusters, for
+                          example tcp:ovn-sb.example.com:6642.
+                        type: string
+                      service:
+                        default: {}
+                        properties:
+                          nbNodePort:
+                            default: 30641
+                            format: int32
+                            type: integer
+                          sbNodePort:
+                            default: 30642
+                            format: int32
+                            type: integer
+                          type:
+                            default: NodePort
+                            description: Service Type string describes ingress methods
+                              for a service
+                            type: string
+                        type: object
+                      storage:
+                        default: {}
+                        properties:
+                          size:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            default: 5Gi
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          storageClassName:
+                            type: string
+                        type: object
+                    type: object
                   limits:
                     default:
                       cpu: 2
@@ -707,6 +862,12 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                     type: object
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    default:
+                      kubernetes.io/os: linux
+                    type: object
                   requests:
                     default:
                       cpu: 200m
@@ -731,7 +892,89 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                     type: object
+                  service:
+                    default: {}
+                    properties:
+                      externalTrafficPolicy:
+                        description: Optional; used when type=LoadBalancer or NodePort.
+                        type: string
+                      loadBalancerIP:
+                        description: Optional; used when type=LoadBalancer.
+                        type: string
+                      type:
+                        default: ClusterIP
+                        description: Service Type string describes ingress methods
+                          for a service
+                        type: string
+                    type: object
+                  storage:
+                    default: {}
+                    properties:
+                      accessModes:
+                        default:
+                        - ReadWriteOnce
+                        items:
+                          type: string
+                        type: array
+                      existingClaim:
+                        description: Set existingClaim to skip in-chart PVC creation
+                          and use a pre-created PVC.
+                        type: string
+                      size:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        default: 10Gi
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      storageClassName:
+                        type: string
+                    type: object
+                  tolerations:
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    type: array
                 type: object
+              ovnCentralMode:
+                default: cluster
+                enum:
+                - cluster
+                - single
+                type: string
               ovnDir:
                 default: /etc/origin/ovn
                 type: string
