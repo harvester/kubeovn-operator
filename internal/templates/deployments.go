@@ -1,21 +1,58 @@
 package templates
 
 var (
-	ovn_central_deployment = `kind: Deployment
+	ovn_central_deployment = `
+{{- /*
+Guard against in-place mode switches that would silently drop the live OVN
+DB. Switching from raft cluster (hostPath /etc/ovn) to single (PVC) leaves
+the new pod starting against an empty PVC; reverse direction loses the
+PVC-backed DB. Detect the existing Deployment's volume type via lookup and
+fail with explicit migration instructions if it disagrees with the rendered
+OVN_CENTRAL_MODE. lookup returns empty during dry-run / template, so this
+only fires on a real install/upgrade against a cluster.
+*/}}
+{{- $existing := lookup "apps/v1" "Deployment" .Values.namespace "ovn-central" }}
+{{- if not (index .Values "ovnCentral" "hcp" "enabled") }}
+{{- if $existing }}
+  {{- range $existing.spec.template.spec.volumes }}
+    {{- if eq .name "host-config-ovn" }}
+      {{- if and (eq $.Values.ovnCentralMode "single") .hostPath }}
+        {{- fail "Refusing to switch OVN_CENTRAL_MODE in place from raft (hostPath) to single (PVC). The new render would start ovn-central against an empty PVC and lose live OVN state. Migrate explicitly: (1) snapshot the current DB with 'bash dist/images/restore-ovn-nb-db.sh' style backup; (2) 'helm uninstall' the current release; (3) 'helm install' with OVN_CENTRAL_MODE=single onto a fresh namespace or after clearing the existing ovn-central Deployment; (4) restore the snapshot via 'bash dist/images/restore-ovn-nb-db.sh single <backup.db>'." }}
+      {{- end }}
+      {{- if and (ne $.Values.ovnCentralMode "single") .persistentVolumeClaim }}
+        {{- fail "Refusing to switch OVN_CENTRAL_MODE in place from single (PVC) to raft (hostPath). The new render would lose the PVC-backed DB. Migrate explicitly: snapshot the DB, helm uninstall, then helm install in the target mode and restore the snapshot." }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+kind: {{ ternary "StatefulSet" "Deployment" (index .Values "ovnCentral" "hcp" "enabled") }}
 apiVersion: apps/v1
 metadata:
   name: ovn-central
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "kubeovn.centralNamespace" . }}
   annotations:
     kubernetes.io/description: |
       OVN components: northd, nb and sb.
 spec:
-  replicas: {{ include "kubeovn.nodeCount" . }}
+  replicas: {{ include "kubeovn.ovnCentralReplicas" . }}
+  {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+  serviceName: ovn-central
+  podManagementPolicy: Parallel
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  {{- else }}
   strategy:
+    {{- if eq .Values.ovnCentralMode "single" }}
+    type: Recreate
+    {{- else }}
     rollingUpdate:
       maxSurge: 0
       maxUnavailable: 1
     type: RollingUpdate
+    {{- end }}
+  {{- end }}
   selector:
     matchLabels:
       app: ovn-central
@@ -27,49 +64,66 @@ spec:
         type: infra
     spec:
       tolerations:
-        - effect: NoSchedule
-          operator: Exists
-        - effect: NoExecute
-          operator: Exists
-        - key: CriticalAddonsOnly
-          operator: Exists
+        {{- with (index .Values "ovnCentral" "tolerations") }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       affinity:
+        {{- if or (index .Values "ovnCentral" "hcp" "enabled") (ne .Values.ovnCentralMode "single") }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
                   app: ovn-central
               topologyKey: kubernetes.io/hostname
-        {{- include "kubeovn.masterNodeAffinity" . | nindent 8 }}      
+        {{- end }}
+        {{- if not (index .Values "ovnCentral" "hcp" "enabled") }}
+        {{- include "kubeovn.masterNodeAffinity" . | nindent 8 }}
+        {{- end }}
       priorityClassName: system-cluster-critical
-      serviceAccountName: ovn-ovs
+      serviceAccountName: {{ ternary "ovn-central" "ovn-ovs" (index .Values "ovnCentral" "hcp" "enabled") }}
       automountServiceAccountToken: true
-      hostNetwork: true
+      hostNetwork: {{ ternary "false" "true" (index .Values "ovnCentral" "hcp" "enabled") }}
       securityContext:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: hostpath-init
+        - name: {{ ternary "volume-init" "hostpath-init" (index .Values "ovnCentral" "hcp" "enabled") }}
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - sh
             - -c
+            {{- if index .Values "ovnCentral" "hcp" "enabled" }}
             - "chown -R nobody: /var/run/ovn /etc/ovn /var/log/ovn"
+            {{- else }}
+            {{- if eq .Values.ovnCentralMode "single" }}
+            # /etc/ovn comes from a PVC in single-replica mode. Backends like
+            # root-squashed NFS reject chown by root, so make the OVN DB
+            # directory chown best-effort; the OVN containers run as "nobody"
+            # and will create new files with the correct owner regardless.
+            - "chown -R nobody: /var/run/ovn /var/log/ovn && (chown -R nobody: /etc/ovn 2>/dev/null || echo 'chown /etc/ovn skipped (likely root-squashed NFS); ovn will write as nobody anyway')"
+            {{- else }}
+            - "chown -R nobody: /var/run/ovn /etc/ovn /var/log/ovn"
+            {{- end }}
+            {{- end }}
           securityContext:
-            allowPrivilegeEscalation: true
+            allowPrivilegeEscalation: {{ ternary "false" "true" (index .Values "ovnCentral" "hcp" "enabled") }}
             capabilities:
+              {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+              add:
+                - CHOWN
+              {{- end }}
               drop:
                 - ALL
-            privileged: true
+            privileged: {{ ternary "false" "true" (index .Values "ovnCentral" "hcp" "enabled") }}
             runAsUser: 0
           volumeMounts:
             - mountPath: /var/run/ovn
-              name: host-run-ovn
+              name: {{ ternary "run-ovn" "host-run-ovn" (index .Values "ovnCentral" "hcp" "enabled") }}
             - mountPath: /etc/ovn
-              name: host-config-ovn
+              name: {{ ternary "ovn-data" "host-config-ovn" (index .Values "ovnCentral" "hcp" "enabled") }}
             - mountPath: /var/log/ovn
-              name: host-log-ovn
+              name: {{ ternary "log-ovn" "host-log-ovn" (index .Values "ovnCentral" "hcp" "enabled") }}
       containers:
         - name: ovn-central
           image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -85,14 +139,8 @@ spec:
                 - NET_BIND_SERVICE
                 - SYS_NICE
           env:
-            - name: ENABLE_SSL
-              value: "{{ .Values.networking.enableSSL }}"
-            - name: NODE_IPS
-              value: "{{ .Values.MASTER_NODES | default (include "kubeovn.nodeIPs" .) }}"
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
+{{- include "kubeovn.ovnCentralTLSEnv" . | nindent 12 }}
+            {{- if index .Values "ovnCentral" "hcp" "enabled" }}
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -101,12 +149,37 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- end }}
+            - name: NODE_IPS
+              value: "{{ include "kubeovn.ovnCentralNodeIPs" . }}"
+            {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+            - name: DB_CLUSTER_ADDR
+              value: "$(POD_NAME).ovn-central.$(POD_NAMESPACE).svc"
+            {{- end }}
+            - name: POD_IP
+              {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+              value: "$(DB_CLUSTER_ADDR)"
+              {{- else }}
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+              {{- end }}
+            {{- if not (index .Values "ovnCentral" "hcp" "enabled") }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- end }}
             - name: POD_IPS
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIPs
             - name: ENABLE_BIND_LOCAL_IP
-              value: "{{- .Values.components.enableBindLocalIP }}"
+              value: "{{ ternary false .Values.func.ENABLE_BIND_LOCAL_IP (index .Values "ovnCentral" "hcp" "enabled") }}"
             - name: PROBE_INTERVAL
               value: "{{ .Values.networking.probeInterval }}"
             - name: OVN_NORTHD_PROBE_INTERVAL
@@ -117,8 +190,6 @@ spec:
               value: "{{ .Values.networking.ovnNorthdNThreads }}"
             - name: ENABLE_COMPACT
               value: "{{ .Values.networking.enableCompact }}"
-            - name: OVN_VERSION_COMPATIBILITY
-              value: '{{ include "kubeovn.ovn.versionCompatibility" . }}'
           resources:
             requests:
               cpu: {{ index .Values "ovnCentral" "requests" "cpu" }}
@@ -129,14 +200,16 @@ spec:
               ephemeral-storage: {{ index .Values "ovnCentral" "limits" "ephemeralStorage" }}
           volumeMounts:
             - mountPath: /var/run/ovn
-              name: host-run-ovn
+              name: {{ ternary "run-ovn" "host-run-ovn" (index .Values "ovnCentral" "hcp" "enabled") }}
             - mountPath: /etc/ovn
-              name: host-config-ovn
+              name: {{ ternary "ovn-data" "host-config-ovn" (index .Values "ovnCentral" "hcp" "enabled") }}
             - mountPath: /var/log/ovn
-              name: host-log-ovn
+              name: {{ ternary "log-ovn" "host-log-ovn" (index .Values "ovnCentral" "hcp" "enabled") }}
+            {{- if not (index .Values "ovnCentral" "hcp" "enabled") }}
             - mountPath: /etc/localtime
               name: localtime
               readOnly: true
+            {{- end }}
             - mountPath: /var/run/tls
               name: kube-ovn-tls
           readinessProbe:
@@ -155,25 +228,58 @@ spec:
             periodSeconds: 15
             failureThreshold: 5
             timeoutSeconds: 45
+      {{- $nodeSelector := index .Values "ovnCentral" "nodeSelector" }}
+      {{- if $nodeSelector }}
       nodeSelector:
-        kubernetes.io/os: "linux"
+        {{- toYaml $nodeSelector | nindent 8 }}
+      {{- end }}
       volumes:
+        {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+        - name: run-ovn
+          emptyDir: {}
+        - name: log-ovn
+          emptyDir: {}
+        {{- else }}
         - name: host-run-ovn
           hostPath:
             path: /run/ovn
         - name: host-config-ovn
+          {{- if eq .Values.ovnCentralMode "single" }}
+          persistentVolumeClaim:
+            claimName: {{ (index .Values "ovnCentral" "storage").existingClaim | default "ovn-central-data" }}
+          {{- else }}
           hostPath:
             path: {{ .Values.ovnDir }}
+          {{- end }}
         - name: host-log-ovn
           hostPath:
             path: {{ .Values.logConfig.logDir }}/ovn
         - name: localtime
           hostPath:
             path: /etc/localtime
+        {{- end }}
         - name: kube-ovn-tls
           secret:
             optional: true
-            secretName: kube-ovn-tls`
+            secretName: kube-ovn-tls
+
+  {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+  volumeClaimTemplates:
+    - metadata:
+        name: ovn-data
+        labels:
+          app: ovn-central
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ index .Values "ovnCentral" "hcp" "storage" "size" }}
+        {{- if index .Values "ovnCentral" "hcp" "storage" "storageClassName" }}
+        storageClassName: {{ index .Values "ovnCentral" "hcp" "storage" "storageClassName" | quote }}
+        {{- end }}
+  {{- end }}
+  `
 
 	kube_ovn_controller_deployment = `kind: Deployment
 apiVersion: apps/v1
@@ -184,7 +290,7 @@ metadata:
     kubernetes.io/description: |
       kube-ovn controller
 spec:
-  replicas: {{ include "kubeovn.nodeCount" . }}
+  replicas: {{ include "kubeovn.controllerReplicas" . }}
   selector:
     matchLabels:
       app: kube-ovn-controller
@@ -252,6 +358,15 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
           - /kube-ovn/start-controller.sh
+          {{- if (index .Values "kubeOvnController" "leaderElection" "leaseDuration") }}
+          - --leader-elect-lease-duration={{ index .Values "kubeOvnController" "leaderElection" "leaseDuration" }}
+          {{- end }}
+          {{- if (index .Values "kubeOvnController" "leaderElection" "renewDeadline") }}
+          - --leader-elect-renew-deadline={{ index .Values "kubeOvnController" "leaderElection" "renewDeadline" }}
+          {{- end }}
+          {{- if (index .Values "kubeOvnController" "leaderElection" "retryPeriod") }}
+          - --leader-elect-retry-period={{ index .Values "kubeOvnController" "leaderElection" "retryPeriod" }}
+          {{- end }}
           - --non-primary-cni-mode={{ .Values.cniConf.nonPrimaryCNI }}
           - --default-ls={{ .Values.networking.defaultSubnet }}
           - --default-cidr=
@@ -329,11 +444,22 @@ spec:
           - --ovsdb-con-timeout={{- .Values.components.OVSDBConTimeout }}
           - --ovsdb-inactivity-timeout={{- .Values.components.OVSDBInactivityTimeout }}
           - --np-enforcement={{- .Values.components.npEnforcement }}
+          - --enable-acl-sampling={{- .Values.aclSampling.enabled }}
+          - --acl-sampling-set-id={{- .Values.aclSampling.setID }}
+          - --acl-sampling-app-id-new={{- .Values.aclSampling.appIDNew }}
+          - --acl-sampling-app-id-established={{- .Values.aclSampling.appIDEstablished }}
+          - --acl-sampling-collector-id-allow={{- .Values.aclSampling.collectorIDAllow }}
+          - --acl-sampling-collector-id-default-deny={{- .Values.aclSampling.collectorIDDefaultDeny }}
+          - --acl-sampling-allow-probability-percent={{- .Values.aclSampling.allowProbabilityPercent }}
+          - --acl-sampling-default-deny-probability-percent={{- .Values.aclSampling.defaultDenyProbabilityPercent }}
           - --enable-live-migration-optimize={{- .Values.components.enableLiveMigrationOptimize }}
           - --enable-ovn-lb-prefer-local={{- .Values.components.enableOVNLBPreferLocal }}
           - --image={{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
           - --skip-conntrack-dst-cidrs={{- .Values.networking.skipConnTrackDstCIDRs | default ""}}
           - --enable-dns-name-resolver={{- .Values.components.enableDNSNameResolver }}
+          {{- if or .Values.networking.tlsMinVersion .Values.networking.tlsMaxVersion .Values.networking.tlsCipherSuites }}
+          {{- include "kubeovn.componentTLSArgs" . | nindent 10 }}
+          {{- end }}
           securityContext:
             runAsUser: {{ include "kubeovn.runAsUser" . }}
             privileged: false
@@ -356,8 +482,24 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+            - name: OVN_NB_ADDR
+              value: "{{ include "kubeovn.ovnNbAddress" . }}"
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.ovnSbAddress" . }}"
+            {{- else if eq .Values.installMode "dataPlaneOnly" }}
+            - name: OVN_NB_ADDR
+              value: "{{ include "kubeovn.externalOvnNbAddress" . }}"
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.externalOvnSbAddress" . }}"
+            {{- else }}
             - name: OVN_DB_IPS
-              value: "{{ .Values.MASTER_NODES | default (include "kubeovn.nodeIPs" .) }}"
+              value: "{{ include "kubeovn.ovnCentralNodeIPs" . }}"
+            - name: KUBE_OVN_NB_PORT
+              value: "{{ include "kubeovn.ovnNbPort" . }}"
+            - name: KUBE_OVN_SB_PORT
+              value: "{{ include "kubeovn.ovnSbPort" . }}"
+            {{- end }}
             - name: POD_IP
               valueFrom:
                 fieldRef:
@@ -514,8 +656,24 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+             {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+            - name: OVN_NB_ADDR
+              value: "{{ include "kubeovn.ovnNbAddress" . }}"
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.ovnSbAddress" . }}"
+            {{- else if eq .Values.installMode "dataPlaneOnly" }}
+            - name: OVN_NB_ADDR
+              value: "{{ include "kubeovn.externalOvnNbAddress" . }}"
+            - name: OVN_SB_ADDR
+              value: "{{ include "kubeovn.externalOvnSbAddress" . }}"
+            {{- else }}
             - name: OVN_DB_IPS
-              value: "{{ .Values.MASTER_NODES | default (include "kubeovn.nodeIPs" .) }}"
+              value: "{{ include "kubeovn.ovnCentralNodeIPs" . }}"
+            - name: KUBE_OVN_NB_PORT
+              value: "{{ include "kubeovn.ovnNbPort" . }}"
+            - name: KUBE_OVN_SB_PORT
+              value: "{{ include "kubeovn.ovnSbPort" . }}"
+            {{- end }}
           resources:
             requests:
               cpu: 300m
@@ -626,6 +784,9 @@ spec:
           command: ["/kube-ovn/start-ovn-monitor.sh"]
           args:
           - --secure-serving={{- .Values.components.secureServing }}
+          {{- if or .Values.networking.tlsMinVersion .Values.networking.tlsMaxVersion .Values.networking.tlsCipherSuites }}
+          {{- include "kubeovn.componentTLSArgs" . | nindent 10 }}
+          {{- end }}
           - --log_file=/var/log/kube-ovn/kube-ovn-monitor.log
           - --logtostderr=false
           - --alsologtostderr=true

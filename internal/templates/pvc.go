@@ -1,0 +1,41 @@
+package templates
+
+var (
+	kube_ovn_central_pvc = `
+{{- if eq .Values.ovnCentralMode "single" }}
+{{- $storage := index .Values "ovnCentral" "storage" }}
+{{- /*
+PVC for the standalone OVN DB. Always created in single-replica mode because
+the Deployment unconditionally mounts a PVC claim. Set
+ovnCentral.storage.existingClaim=<name> to point the Deployment at an
+externally-managed claim and skip in-chart PVC creation.
+*/ -}}
+{{- if not $storage.existingClaim }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: ovn-central-data
+  namespace: {{ .Values.namespace }}
+  annotations:
+    # Pin the PVC so an installMode switch (e.g. full -> dataPlaneOnly) that
+    # stops rendering this template does NOT delete the volume holding the
+    # standalone OVN DB. Operators can kubectl delete pvc ovn-central-data
+    # explicitly when they really mean to discard the DB.
+    helm.sh/resource-policy: keep
+    kubernetes.io/description: |
+      Persistent storage for the ovn-central standalone OVN DB files.
+spec:
+  accessModes:
+{{ toYaml $storage.accessModes | indent 4 }}
+  resources:
+    requests:
+      storage: {{ $storage.size }}
+  {{- with $storage.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
+`
+
+	PersistentVolumeClaimList = []string{kube_ovn_central_pvc}
+)

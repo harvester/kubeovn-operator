@@ -62,5 +62,24 @@ imagePullSecrets:
 {{- end }}
 {{- end }}`
 
-	ServiceAccountList = []string{ovn_sa_template, ovn_ovs_template, kube_ovn_cni, kube_ovn_app_template}
+	kube_ovn_central_template = `
+{{- if index .Values "ovnCentral" "hcp" "enabled" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ovn-central
+  namespace: {{ include "kubeovn.centralNamespace" . }}
+automountServiceAccountToken: false
+{{- if .Values.global.registry.imagePullSecrets }}
+imagePullSecrets:
+{{- range $index, $secret := .Values.global.registry.imagePullSecrets }}
+{{- if $secret }}
+  - name: {{ $secret | quote}}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+`
+
+	ServiceAccountList = []string{ovn_sa_template, ovn_ovs_template, kube_ovn_cni, kube_ovn_app_template, kube_ovn_central_template}
 )
