@@ -71,5 +71,21 @@ roleRef:
   name: secret-reader-ovn-ipsec
   apiGroup: rbac.authorization.k8s.io`
 
-	RoleBindingList = []string{kube_ovn_cni_rolebinding, kube_ovn_app_rolebinding, kube_ovn_cni_secret_reader_rolebinding, ovn_rolebinding, ovn_ipsec_rolebinding}
+	ovn_central_rolebinding = `
+{{- if index .Values "ovnCentral" "hcp" "enabled" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ovn-central
+  namespace: {{ include "kubeovn.centralNamespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ovn-central
+subjects:
+  - kind: ServiceAccount
+    name: ovn-central
+    namespace: {{ include "kubeovn.centralNamespace" . }}
+{{- end }}`
+	RoleBindingList = []string{kube_ovn_cni_rolebinding, kube_ovn_app_rolebinding, kube_ovn_cni_secret_reader_rolebinding, ovn_rolebinding, ovn_ipsec_rolebinding, ovn_central_rolebinding}
 )
