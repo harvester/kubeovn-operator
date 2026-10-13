@@ -52,11 +52,11 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-	version  = "v1.16.2"
+	version  = "v1.16.4"
 )
 
 const (
-	DefaultVersion = "v1.16.2"
+	DefaultVersion = "v1.16.4"
 )
 
 func init() {
