@@ -201,6 +201,9 @@ spec:
       port: 443
       targetPort: 8443
   type: ClusterIP
+  {{- if eq .Values.networking.netStack "dual_stack" }}
+  ipFamilyPolicy: PreferDualStack
+  {{- end }}
   selector:
     app: kube-ovn-webhook
   sessionAffinity: None

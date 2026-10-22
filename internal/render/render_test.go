@@ -69,7 +69,7 @@ func Test_ServiceIPFamilyPolicy(t *testing.T) {
 	// Services whose templates opt into PreferDualStack when netStack is dual_stack.
 	dualStackServices := []string{
 		"kube-ovn-controller", "kube-ovn-monitor", "ovn-nb", "ovn-northd",
-		"kube-ovn-cni", "kube-ovn-pinger", "ovn-sb",
+		"kube-ovn-cni", "kube-ovn-pinger", "ovn-sb", "kube-ovn-webhook",
 	}
 	for _, netStack := range []string{"ipv4", "ipv6", "dual_stack"} {
 		t.Run(netStack, func(t *testing.T) {
