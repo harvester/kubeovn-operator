@@ -71,7 +71,7 @@ spec:
   {{- if and (not $hcp.enabled) (or (eq $svc.type "LoadBalancer") (eq $svc.type "NodePort")) $svc.externalTrafficPolicy }}
   externalTrafficPolicy: {{ $svc.externalTrafficPolicy }}
   {{- end }}
-  {{- if eq .Values.networking.NET_STACK "dual_stack" }}
+  {{- if eq .Values.networking.netStack "dual_stack" }}
   ipFamilyPolicy: PreferDualStack
   {{- end }}
   selector:
@@ -106,7 +106,7 @@ spec:
   {{- if and (not $hcp.enabled) (or (eq $svc.type "LoadBalancer") (eq $svc.type "NodePort")) $svc.externalTrafficPolicy }}
   externalTrafficPolicy: {{ $svc.externalTrafficPolicy }}
   {{- end }}
-  {{- if eq .Values.networking.NET_STACK "dual_stack" }}
+  {{- if eq .Values.networking.netStack "dual_stack" }}
   ipFamilyPolicy: PreferDualStack
   {{- end }}
   selector:
@@ -129,7 +129,7 @@ spec:
   ports:
     - port: 10665
       name: metrics
-  {{- if eq .Values.networking.NET_STACK "dual_stack" }}
+  {{- if eq .Values.networking.netStack "dual_stack" }}
   ipFamilyPolicy: PreferDualStack
   {{- end }}`
 
@@ -146,7 +146,7 @@ spec:
   ports:
     - port: 8080
       name: metrics
-  {{- if eq .Values.networking.NET_STACK "dual_stack" }}
+  {{- if eq .Values.networking.netStack "dual_stack" }}
   ipFamilyPolicy: PreferDualStack
   {{- end }}`
 
@@ -179,7 +179,7 @@ spec:
   {{- if and (not $hcp.enabled) (or (eq $svc.type "LoadBalancer") (eq $svc.type "NodePort")) $svc.externalTrafficPolicy }}
   externalTrafficPolicy: {{ $svc.externalTrafficPolicy }}
   {{- end }}
-  {{- if eq .Values.networking.NET_STACK "dual_stack" }}
+  {{- if eq .Values.networking.netStack "dual_stack" }}
   ipFamilyPolicy: PreferDualStack
   {{- end }}
   selector:
