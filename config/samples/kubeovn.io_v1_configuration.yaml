@@ -187,6 +187,10 @@ spec:
       operator: Exists
     nodeSelector:
       kubernetes.io/os: "linux"
+    # Optional label (key=value or key) selecting the nodes hosting the ovn-central NB/SB raft
+    # members. Defaults to masterNodesLabel when unset. Use an odd number of nodes, e.g. on a
+    # Harvester cluster with 2 control-plane nodes and 1 witness node:
+    # nodesLabel: node-role.kubernetes.io/etcd=true
     hcp:
       enabled: false
       namespace: kube-system

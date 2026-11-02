@@ -329,6 +329,11 @@ func (in *ConfigurationStatus) DeepCopyInto(out *ConfigurationStatus) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.OVNCentralNodeAddresses != nil {
+		in, out := &in.OVNCentralNodeAddresses, &out.OVNCentralNodeAddresses
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))
