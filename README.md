@@ -173,7 +173,19 @@ spec:
   masterNodesLabel: node-role.kubernetes.io/control-plane=true
   ovnCentral:
     nodesLabel: node-role.kubernetes.io/etcd=true
+    # the Harvester witness node is tainted node-role.kubernetes.io/etcd=true:NoExecute;
+    # ovn-central only gets the tolerations listed here
+    tolerations:
+      - key: node-role.kubernetes.io/etcd
+        operator: Equal
+        value: "true"
+        effect: NoExecute
 ```
+
+If any selected node is tainted, add a matching entry to `ovnCentral.tolerations`, or that raft member stays
+`Pending`. Only enable or widen `nodesLabel` while the existing raft cluster has a leader
+(`ovn-appctl -t /var/run/ovn/ovnnb_db.ctl cluster/status OVN_Northbound`); a new member can't join a cluster
+that has lost quorum.
 
 Only the ovn-central deployment (placement, replica count and `NODE_IPS`) and the OVN DB addresses used by
 OVN clients (`OVN_DB_IPS` of kube-ovn-controller, ovn-ic-controller, ovs-ovn and ovs-ovn-dpdk) follow this label.

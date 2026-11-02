@@ -191,6 +191,9 @@ spec:
     # members. Defaults to masterNodesLabel when unset. Use an odd number of nodes, e.g. on a
     # Harvester cluster with 2 control-plane nodes and 1 witness node:
     # nodesLabel: node-role.kubernetes.io/etcd=true
+    # the witness is tainted, so ovn-central also needs a matching toleration:
+    # tolerations:
+    #   - {key: node-role.kubernetes.io/etcd, operator: Equal, value: "true", effect: NoExecute}
     hcp:
       enabled: false
       namespace: kube-system
