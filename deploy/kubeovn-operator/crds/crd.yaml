@@ -868,6 +868,17 @@ spec:
                     default:
                       kubernetes.io/os: linux
                     type: object
+                  nodesLabel:
+                    description: |-
+                      NodesLabel is a label selector (key=value or key) choosing the nodes that host
+                      the ovn-central NB/SB raft members. When empty, masterNodesLabel is used
+                      (previous behavior). Only ovn-central placement, its replica count and the
+                      OVN DB addresses handed to OVN clients follow this label; kube-ovn-controller
+                      and the other control-plane components keep using masterNodesLabel.
+                      An odd-sized set is recommended for raft fault tolerance, for example
+                      node-role.kubernetes.io/etcd=true on Harvester so that a witness node becomes
+                      the third raft member. Ignored when hcp.enabled is true or ovnCentralMode is single.
+                    type: string
                   requests:
                     default:
                       cpu: 200m
@@ -1137,6 +1148,14 @@ spec:
                   type: object
                 type: array
               matchingNodeAddresses:
+                items:
+                  type: string
+                type: array
+              ovnCentralNodeAddresses:
+                description: |-
+                  OVNCentralNodeAddresses are the internal IPs of nodes matching
+                  spec.ovnCentral.nodesLabel (or masterNodesLabel when nodesLabel is empty).
+                  These nodes host the ovn-central NB/SB raft members.
                 items:
                   type: string
                 type: array
