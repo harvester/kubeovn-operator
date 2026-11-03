@@ -2,7 +2,7 @@ module github.com/harvester/kubeovn-operator
 
 go 1.25.0
 
-toolchain go1.25.2
+toolchain go1.26.10
 
 godebug default=go1.25
 
