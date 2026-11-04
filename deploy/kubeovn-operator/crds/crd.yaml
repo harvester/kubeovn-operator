@@ -70,6 +70,46 @@ spec:
                     default: 142
                     type: integer
                 type: object
+              bgp:
+                description: BGPSpec defines the BGP speaker configuration.
+                properties:
+                  clusterAS:
+                    description: ClusterAS is the AS number used by the local cluster.
+                    format: int64
+                    maximum: 4294967294
+                    minimum: 1
+                    type: integer
+                  neighborAS:
+                    description: NeighborAS is the AS number of the external BGP neighbor.
+                    format: int64
+                    maximum: 4294967294
+                    minimum: 1
+                    type: integer
+                  neighborV4Address:
+                    description: |-
+                      NeighborV4Address specifies the external BGP neighbor IPv4 addresses
+                      as comma-separated values.
+                    type: string
+                  neighborV6Address:
+                    description: |-
+                      NeighborV6Address specifies the external BGP neighbor IPv6 addresses
+                      as comma-separated values.
+                    type: string
+                  nextHops:
+                    description: |-
+                      NextHops specifies the next-hop IP addresses for advertised routes
+                      as comma-separated values (IPv4,IPv6).
+                      Supports at most one address per address family.
+                    type: string
+                  nodeNames:
+                    description: |-
+                      NodeNames specifies comma-separated Kubernetes node names
+                      on which the Kube-OVN BGP speaker should run.
+                    type: string
+                  routerID:
+                    description: RouterID is the BGP router ID.
+                    type: string
+                type: object
               cniConf:
                 default: {}
                 properties:
