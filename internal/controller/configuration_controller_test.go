@@ -225,6 +225,133 @@ var _ = Describe("Configuration Controller", func() {
 	})
 })
 
+var _ = Describe("reconcileBGPNodeLabels function", func() {
+
+	const nodeA = "bgp-node-a"
+	const nodeB = "bgp-node-b"
+	const nodeC = "bgp-node-c"
+
+	BeforeEach(func() {
+		for _, name := range []string{nodeA, nodeB, nodeC} {
+			node := &corev1.Node{}
+			node.SetName(name)
+			existing := &corev1.Node{}
+			getErr := k8sClient.Get(ctx, types.NamespacedName{Name: name}, existing)
+			if getErr != nil && apierrors.IsNotFound(getErr) {
+				Expect(k8sClient.Create(ctx, node)).To(Succeed())
+			}
+		}
+	})
+
+	AfterEach(func() {
+		for _, name := range []string{nodeA, nodeB, nodeC} {
+			leftover := &corev1.Node{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, leftover); err == nil {
+				_ = k8sClient.Delete(ctx, leftover)
+			}
+		}
+	})
+
+	When("Spec.BGPSpec.NodeNames specifies only a subset of nodes", func() {
+		It("should label only the nodes present in NodeNames and leave others unlabeled", func() {
+			reconciler := &ConfigurationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			cfg := &kubeovniov1.Configuration{}
+			cfg.Spec.BGP.NodeNames = fmt.Sprintf("%s, %s", nodeA, nodeB)
+
+			err := reconciler.reconcileBGPNodeLabels(ctx, cfg)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(func() string {
+				updated := &corev1.Node{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: nodeA}, updated)
+				return updated.Labels[BGPSpeakerNodeLabel]
+			}, "10s", "2s").Should(Equal(BGPSpeakerNodeValue))
+
+			Eventually(func() string {
+				updated := &corev1.Node{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: nodeB}, updated)
+				return updated.Labels[BGPSpeakerNodeLabel]
+			}, "10s", "2s").Should(Equal(BGPSpeakerNodeValue))
+
+			nodeCObj := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeC}, nodeCObj)).To(Succeed())
+			_, present := nodeCObj.Labels[BGPSpeakerNodeLabel]
+			Expect(present).To(BeFalse())
+		})
+	})
+
+	When("a node is removed from NodeNames on a subsequent reconcile", func() {
+		It("should remove the bgp label from the node no longer listed", func() {
+			reconciler := &ConfigurationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			cfg := &kubeovniov1.Configuration{}
+			cfg.Spec.BGP.NodeNames = fmt.Sprintf("%s, %s", nodeA, nodeB)
+
+			Expect(reconciler.reconcileBGPNodeLabels(ctx, cfg)).To(Succeed())
+
+			Eventually(func() string {
+				updated := &corev1.Node{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: nodeB}, updated)
+				return updated.Labels[BGPSpeakerNodeLabel]
+			}, "10s", "2s").Should(Equal(BGPSpeakerNodeValue))
+
+			cfg.Spec.BGP.NodeNames = nodeA
+			Expect(reconciler.reconcileBGPNodeLabels(ctx, cfg)).To(Succeed())
+
+			Eventually(func() bool {
+				updated := &corev1.Node{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: nodeB}, updated)
+				_, present := updated.Labels[BGPSpeakerNodeLabel]
+				return present
+			}, "10s", "2s").Should(BeFalse())
+
+			nodeAObj := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeA}, nodeAObj)).To(Succeed())
+			Expect(nodeAObj.Labels[BGPSpeakerNodeLabel]).To(Equal(BGPSpeakerNodeValue))
+		})
+	})
+
+	When("a new node is added to NodeNames on a subsequent reconcile", func() {
+		It("should apply the bgp label to the newly added node", func() {
+			reconciler := &ConfigurationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			cfg := &kubeovniov1.Configuration{}
+			cfg.Spec.BGP.NodeNames = nodeA
+			Expect(reconciler.reconcileBGPNodeLabels(ctx, cfg)).To(Succeed())
+
+			Consistently(func() bool {
+				current := &corev1.Node{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: nodeB}, current)
+				_, present := current.Labels[BGPSpeakerNodeLabel]
+				return present
+			}, "5s", "1s").Should(BeFalse())
+
+			cfg.Spec.BGP.NodeNames = fmt.Sprintf("%s, %s", nodeA, nodeB)
+			Expect(reconciler.reconcileBGPNodeLabels(ctx, cfg)).To(Succeed())
+
+			Eventually(func() string {
+				current := &corev1.Node{}
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: nodeB}, current)
+				return current.Labels[BGPSpeakerNodeLabel]
+			}, "10s", "2s").Should(Equal(BGPSpeakerNodeValue))
+
+			currentA := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeA}, currentA)).To(Succeed())
+			Expect(currentA.Labels[BGPSpeakerNodeLabel]).To(Equal(BGPSpeakerNodeValue))
+		})
+	})
+})
+
 func generateWebhookSecret() (*corev1.Secret, error) {
 	//nolint:gosec
 	var webhookSecretTemplate = `{{- $webhookSvcAltNames := list (printf "kubeovn-operator-webhook-service.%s.svc" "kube-system") (printf "kubeovn-operator-controller-manager-metrics-service.%s.svc" "kube-system") (printf "kube-ovn-webhook.%s.svc" "kube-system")}}

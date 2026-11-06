@@ -100,6 +100,44 @@ type ConfigurationSpec struct {
 	// expose the management cluster's ovn-nb / ovn-sb Services.
 	// +kubebuilder:default:={}
 	ExternalOVNCentral ExternalOVNCentralSpec `json:"externalOvnCentral,omitempty"`
+
+	BGP BGPSpec `json:"bgp,omitempty"`
+}
+
+// BGPSpec defines the BGP speaker configuration.
+type BGPSpec struct {
+	// NodeNames specifies comma-separated Kubernetes node names
+	// on which the Kube-OVN BGP speaker should run.
+	// +optional
+	NodeNames string `json:"nodeNames,omitempty"`
+
+	// NeighborV4Address specifies the external BGP neighbor IPv4 addresses
+	// as comma-separated values.
+	NeighborV4Address string `json:"neighborV4Address,omitempty"`
+
+	// NeighborV6Address specifies the external BGP neighbor IPv6 addresses
+	// as comma-separated values.
+	NeighborV6Address string `json:"neighborV6Address,omitempty"`
+
+	// NeighborAS is the AS number of the external BGP neighbor.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=4294967294
+	NeighborAS int64 `json:"neighborAS,omitempty"`
+
+	// ClusterAS is the AS number used by the local cluster.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=4294967294
+	ClusterAS int64 `json:"clusterAS,omitempty"`
+
+	// RouterID is the BGP router ID.
+	// +optional
+	RouterID string `json:"routerID,omitempty"`
+
+	// NextHops specifies the next-hop IP addresses for advertised routes
+	// as comma-separated values (IPv4,IPv6).
+	// Supports at most one address per address family.
+	// +optional
+	NextHops string `json:"nextHops,omitempty"`
 }
 
 type ExternalOVNCentralSpec struct {

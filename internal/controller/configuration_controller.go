@@ -51,6 +51,11 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
+const (
+	BGPSpeakerNodeLabel = "ovn.kubernetes.io/bgp"
+	BGPSpeakerNodeValue = "true"
+)
+
 // ConfigurationReconciler reconciles a Configuration object
 type ConfigurationReconciler struct {
 	client.Client
@@ -119,7 +124,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, r.Client.Patch(ctx, config, client.MergeFrom(configObj))
 	}
 
-	reconcileSteps := []reconcileFuncs{r.initializeConditions, r.reconcileClusterScopedReference, r.findMasterNodes, r.applyObject}
+	reconcileSteps := []reconcileFuncs{r.initializeConditions, r.reconcileClusterScopedReference, r.findMasterNodes, r.reconcileBGPNodeLabels, r.applyObject}
 
 	for _, v := range reconcileSteps {
 		if err := v(ctx, config); err != nil {
@@ -260,6 +265,145 @@ func (r *ConfigurationReconciler) AddWatches(b *builder.Builder) *builder.Builde
 		b.Watches(key, handler.EnqueueRequestsFromMapFunc(r.filterObject), builder.WithPredicates(updatePred))
 	}
 	return b
+}
+
+func (r *ConfigurationReconciler) addBGPNodeLabel(
+	ctx context.Context,
+	nodeNames []string,
+) error {
+	for _, name := range nodeNames {
+		node := &corev1.Node{}
+
+		if err := r.Get(ctx, types.NamespacedName{
+			Name: name,
+		}, node); err != nil {
+			if apierrors.IsNotFound(err) {
+				r.Log.WithValues("node", name).Info("desired BGP speaker node not found yet, will retry on next reconcile")
+				continue
+			}
+			return fmt.Errorf("failed to get node %q: %w", name, err)
+		}
+
+		if node.Labels != nil &&
+			node.Labels[BGPSpeakerNodeLabel] == BGPSpeakerNodeValue {
+			continue
+		}
+
+		patch := client.MergeFrom(node.DeepCopy())
+
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+
+		node.Labels[BGPSpeakerNodeLabel] = BGPSpeakerNodeValue
+
+		if err := r.Patch(ctx, node, patch); err != nil {
+			return fmt.Errorf("failed to add BGP speaker label to node %q: %w", name, err)
+		}
+
+		r.Log.WithValues("node", name).Info("Added BGP speaker node label")
+	}
+
+	return nil
+}
+
+func (r *ConfigurationReconciler) removeBGPNodeLabel(
+	ctx context.Context,
+	nodeNames []string,
+) error {
+	for _, name := range nodeNames {
+		node := &corev1.Node{}
+
+		if err := r.Get(ctx, types.NamespacedName{
+			Name: name,
+		}, node); err != nil {
+			if apierrors.IsNotFound(err) {
+				r.Log.WithValues("node", name).Info("node already removed, skipping BGP label removal")
+				continue
+			}
+			return fmt.Errorf("failed to get node %q: %w", name, err)
+		}
+
+		if node.Labels == nil {
+			continue
+		}
+
+		if _, exists := node.Labels[BGPSpeakerNodeLabel]; !exists {
+			continue
+		}
+
+		patch := client.MergeFrom(node.DeepCopy())
+
+		delete(node.Labels, BGPSpeakerNodeLabel)
+
+		if err := r.Patch(ctx, node, patch); err != nil {
+			return fmt.Errorf("failed to remove BGP speaker label from node %q: %w", name, err)
+		}
+
+		r.Log.WithValues("node", name).Info("Removed BGP speaker node label")
+	}
+
+	return nil
+}
+
+func (r *ConfigurationReconciler) reconcileBGPNodeLabels(
+	ctx context.Context,
+	config *kubeovniov1.Configuration,
+) error {
+	desiredNodes := make(map[string]struct{})
+
+	for _, name := range strings.Split(config.Spec.BGP.NodeNames, ",") {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			desiredNodes[name] = struct{}{}
+		}
+	}
+
+	// Get all currently labelled nodes.
+	currentNodes := &corev1.NodeList{}
+	if err := r.List(ctx, currentNodes, client.MatchingLabels{
+		BGPSpeakerNodeLabel: BGPSpeakerNodeValue,
+	}); err != nil {
+		return fmt.Errorf("failed to list BGP speaker nodes: %w", err)
+	}
+
+	currentNodeNames := make(map[string]struct{})
+
+	for i := range currentNodes.Items {
+		currentNodeNames[currentNodes.Items[i].Name] = struct{}{}
+	}
+
+	// Identify nodes that need labels added.
+	nodesToAdd := make([]string, 0)
+
+	for name := range desiredNodes {
+		if _, exists := currentNodeNames[name]; !exists {
+			nodesToAdd = append(nodesToAdd, name)
+		}
+	}
+
+	// Identify nodes that need labels removed.
+	nodesToRemove := make([]string, 0)
+
+	for name := range currentNodeNames {
+		if _, exists := desiredNodes[name]; !exists {
+			nodesToRemove = append(nodesToRemove, name)
+		}
+	}
+
+	if len(nodesToAdd) > 0 {
+		if err := r.addBGPNodeLabel(ctx, nodesToAdd); err != nil {
+			return err
+		}
+	}
+
+	if len(nodesToRemove) > 0 {
+		if err := r.removeBGPNodeLabel(ctx, nodesToRemove); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // findMasterNodes will find nodes matching the master label criteria in the configuration
