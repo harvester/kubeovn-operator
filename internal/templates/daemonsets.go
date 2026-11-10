@@ -876,5 +876,85 @@ spec:
             optional: true
             secretName: kube-ovn-tls`
 
-	DaemonsetList = []string{ovs_ovn_dpdk_daemonset, kube_ovn_cni_daemonset, ovs_ovn_daemonset, kube_ovn_pinger_daemonsets}
+	kube_ovn_speaker_daemonset = `kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: kube-ovn-speaker
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: kube-ovn-speaker
+  template:
+    metadata:
+      labels:
+        app: kube-ovn-speaker
+        component: network
+        type: infra
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: kube-ovn-speaker
+              topologyKey: kubernetes.io/hostname
+      priorityClassName: system-node-critical
+      serviceAccountName: ovn
+      automountServiceAccountToken: true
+      hostNetwork: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kube-ovn-speaker
+          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command:
+            - /kube-ovn/kube-ovn-speaker
+          args:
+            - --logtostderr=false
+            - --alsologtostderr=true
+            - --log_file=/var/log/kube-ovn/kube-ovn-speaker.log
+            - --log_file_max_size=200
+            - --neighbor-address={{ .Values.bgp.neighborV4Address | default "192.0.2.1" }}
+            - --neighbor-ipv6-address={{ .Values.bgp.neighborV6Address | default "2001:db8::1" }}
+            - --neighbor-as={{ .Values.bgp.neighborAS | default 64512 | int64 }}
+            - --cluster-as={{ .Values.bgp.clusterAS | default 64513 | int64 }}
+            {{- if .Values.bgp.routerID }}
+             - --router-id={{ .Values.bgp.routerID }}
+            {{- end }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_IPS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIPs
+          resources:
+            requests:
+              cpu: 500m
+              memory: 300Mi
+          volumeMounts:
+            - name: kube-ovn-log
+              mountPath: /var/log/kube-ovn
+      nodeSelector:
+        kubernetes.io/os: "linux"
+        ovn.kubernetes.io/bgp: "true"
+      volumes:
+        - name: kube-ovn-log
+          hostPath:
+            path: {{ .Values.logConfig.logDir }}/kube-ovn
+            type: DirectoryOrCreate`
+
+	DaemonsetList = []string{ovs_ovn_dpdk_daemonset, kube_ovn_cni_daemonset, ovs_ovn_daemonset, kube_ovn_pinger_daemonsets, kube_ovn_speaker_daemonset}
 )
