@@ -69,7 +69,7 @@ spec:
               value: "{{ include "kubeovn.externalOvnSbAddress" . }}"
             {{- else }}
             - name: OVN_DB_IPS
-              value: "{{ .Values.MASTER_NODES | default (include "kubeovn.nodeIPs" .) }}"
+              value: "{{ include "kubeovn.ovnCentralNodeIPs" . }}"
             {{- end }}
             - name: OVN_REMOTE_PROBE_INTERVAL
               value: "{{ .Values.networking.ovnRemoteProbeInterval }}"

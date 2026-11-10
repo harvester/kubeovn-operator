@@ -405,6 +405,16 @@ type OVNCentralResourceSpec struct {
 	Storage OVNCentralStorageSpec `json:"storage,omitempty"`
 	// +kubebuilder:default:={}
 	Service OVNCentralServiceSpec `json:"service,omitempty"`
+	// NodesLabel is a label selector (key=value or key) choosing the nodes that host
+	// the ovn-central NB/SB raft members. When empty, masterNodesLabel is used
+	// (previous behavior). Only ovn-central placement, its replica count and the
+	// OVN DB addresses handed to OVN clients follow this label; kube-ovn-controller
+	// and the other control-plane components keep using masterNodesLabel.
+	// An odd-sized set is recommended for raft fault tolerance, for example
+	// node-role.kubernetes.io/etcd=true on Harvester so that a witness node becomes
+	// the third raft member. Ignored when hcp.enabled is true or ovnCentralMode is single.
+	// +optional
+	NodesLabel string `json:"nodesLabel,omitempty"`
 }
 
 type OVNControllerResourceSpec struct {
@@ -509,10 +519,14 @@ type ACLSamplingSpec struct {
 
 // ConfigurationStatus defines the observed state of Configuration.
 type ConfigurationStatus struct {
-	MatchingNodeAddresses []string           `json:"matchingNodeAddresses,omitempty"`
-	Conditions            []metav1.Condition `json:"conditions,omitempty"`
-	Status                string             `json:"status,omitempty"`
-	ManagedObjects        []ObjectReference  `json:"managedObjects,omitempty"`
+	MatchingNodeAddresses []string `json:"matchingNodeAddresses,omitempty"`
+	// OVNCentralNodeAddresses are the internal IPs of nodes matching
+	// spec.ovnCentral.nodesLabel (or masterNodesLabel when nodesLabel is empty).
+	// These nodes host the ovn-central NB/SB raft members.
+	OVNCentralNodeAddresses []string           `json:"ovnCentralNodeAddresses,omitempty"`
+	Conditions              []metav1.Condition `json:"conditions,omitempty"`
+	Status                  string             `json:"status,omitempty"`
+	ManagedObjects          []ObjectReference  `json:"managedObjects,omitempty"`
 }
 
 type ObjectReference struct {
@@ -639,4 +653,11 @@ func (c *Configuration) ConditionExists(conditionType string) bool {
 		}
 	}
 	return false
+}
+
+// OVNCentralNodesLabelInUse returns true when spec.ovnCentral.nodesLabel drives the placement
+// of the ovn-central raft members. The label is ignored for HCP and single ovn-central modes.
+func (c *Configuration) OVNCentralNodesLabelInUse() bool {
+	hcpEnabled := c.Spec.OVNCentral.HCP.Enabled != nil && *c.Spec.OVNCentral.HCP.Enabled
+	return c.Spec.OVNCentral.NodesLabel != "" && !hcpEnabled && c.Spec.OVNCentralMode != "single"
 }

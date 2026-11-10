@@ -77,6 +77,19 @@ func GenerateObjects(templates []string, config *ovnoperatorv1.Configuration, ob
 		}
 	}
 
+	// generate ovn-central node affinity, this is only used by the ovn-central deployment and
+	// is identical to masterNodeAffinity unless spec.ovnCentral.nodesLabel is set
+	ovnCentralNodeAffinity, err := generateOVNCentralNodeAffinity(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ovn-central node affinity: %v", err)
+	}
+	if ovnCentralNodeAffinity != "" {
+		err = unstructured.SetNestedField(valsObj, ovnCentralNodeAffinity, "kubeovn", "ovnCentralNodeAffinity")
+		if err != nil {
+			return nil, fmt.Errorf("failed to set field ovnCentralNodeAffinity in values map: %v", err)
+		}
+	}
+
 	for _, sourceTemplate := range templates {
 		returnedObject, err := generateObject(sourceTemplate, valsObj, object, restConfig)
 		if err != nil {
@@ -227,13 +240,43 @@ func GenerateChassisCleanupScript(hostname string) (string, error) {
 }
 
 func generateMasterNodeAffinity(config *ovnoperatorv1.Configuration) (string, error) {
+	return generateNodeAffinity(config.Spec.MasterNodesLabel)
+}
 
-	// if there are no MasterNodeLabels return empty string
-	if config.Spec.MasterNodesLabel == "" {
+// generateOVNCentralNodeAffinity generates the node affinity used by the ovn-central deployment.
+// It is based on spec.ovnCentral.nodesLabel and falls back to spec.masterNodesLabel when unset
+// (or when the label is not in use, see Configuration.OVNCentralNodesLabelInUse).
+func generateOVNCentralNodeAffinity(config *ovnoperatorv1.Configuration) (string, error) {
+	return generateNodeAffinity(ovnCentralNodesLabel(config))
+}
+
+// ovnCentralNodesLabel returns the effective label used to place ovn-central raft members
+func ovnCentralNodesLabel(config *ovnoperatorv1.Configuration) string {
+	if config.OVNCentralNodesLabelInUse() {
+		return config.Spec.OVNCentral.NodesLabel
+	}
+	return config.Spec.MasterNodesLabel
+}
+
+// ovnCentralNodeAddresses returns the addresses of the nodes hosting ovn-central raft members.
+// When spec.ovnCentral.nodesLabel is not in use, status.matchingNodeAddresses is used so that the
+// rendered output is unchanged from previous releases.
+func ovnCentralNodeAddresses(config *ovnoperatorv1.Configuration) []string {
+	if config.OVNCentralNodesLabelInUse() && len(config.Status.OVNCentralNodeAddresses) > 0 {
+		return config.Status.OVNCentralNodeAddresses
+	}
+	return config.Status.MatchingNodeAddresses
+}
+
+// generateNodeAffinity renders a required node affinity for a "key=value" or "key" label
+func generateNodeAffinity(label string) (string, error) {
+
+	// if there is no label return empty string
+	if label == "" {
 		return "", nil
 	}
 
-	podAffinityTemplate := `{{- $parts := splitList "=" .Spec.MasterNodesLabel -}}
+	podAffinityTemplate := `{{- $parts := splitList "=" . -}}
 {{- $key := index $parts 0 -}}
 {{- $val := "" -}}
 {{- if gt (len $parts) 1 -}}
@@ -252,14 +295,14 @@ nodeAffinity:
             operator: Exists
           {{- end }}`
 	f := sprig.TxtFuncMap()
-	masterNodeAffinityTmpl, err := template.New("masterNodeAffinity").Funcs(f).Parse(podAffinityTemplate)
+	masterNodeAffinityTmpl, err := template.New("nodeAffinity").Funcs(f).Parse(podAffinityTemplate)
 	if err != nil {
-		return "", fmt.Errorf("error parsing master node affinity template: %v", err)
+		return "", fmt.Errorf("error parsing node affinity template: %v", err)
 	}
 	var result bytes.Buffer
-	err = masterNodeAffinityTmpl.Execute(&result, config)
+	err = masterNodeAffinityTmpl.Execute(&result, label)
 	if err != nil {
-		return "", fmt.Errorf("error during master node affinity template execution using config %v: %v", config, err)
+		return "", fmt.Errorf("error during node affinity template execution using label %s: %v", label, err)
 	}
 	return result.String(), nil
 }
@@ -333,11 +376,13 @@ func generateIncludeValues(config *ovnoperatorv1.Configuration) map[string]inter
 	} else if config.Spec.OVNCentralMode == "single" {
 		ovnCentralReplicas = 1
 	} else {
-		ovnCentralReplicas = int64(len(config.Status.MatchingNodeAddresses))
+		ovnCentralReplicas = int64(len(ovnCentralNodeAddresses(config)))
 	}
 
 	// kubeovn.ovnCentralNodeIPs
-	ovnCentralNodeIPs := nodeIPs
+	// raft members of ovn-central (NODE_IPS) and the OVN DB addresses used by OVN clients
+	// (OVN_DB_IPS) follow spec.ovnCentral.nodesLabel, falling back to the master nodes
+	ovnCentralNodeIPs := strings.Join(ovnCentralNodeAddresses(config), ",")
 
 	if hcpEnabled {
 		addresses := make([]string, 0, ovnCentralReplicas)

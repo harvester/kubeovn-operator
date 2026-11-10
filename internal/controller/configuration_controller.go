@@ -143,8 +143,35 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
 		For(&kubeovniov1.Configuration{}).
-		Named("kubeovn-configuration-controller")
+		Named("kubeovn-configuration-controller").
+		// requeue the configuration when nodes are added/removed or their labels/addresses change
+		// so that status.matchingNodeAddresses and status.ovnCentralNodeAddresses follow the cluster
+		Watches(&corev1.Node{}, handler.EnqueueRequestsFromMapFunc(r.mapNodeToConfiguration), builder.WithPredicates(nodeChangedPredicate()))
 	return r.AddWatches(b).Complete(r)
+}
+
+// mapNodeToConfiguration maps node events to the default configuration object
+func (r *ConfigurationReconciler) mapNodeToConfiguration(_ context.Context, _ client.Object) []ctrl.Request {
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: kubeovniov1.DefaultConfigurationName, Namespace: r.Namespace}}}
+}
+
+// nodeChangedPredicate only lets through node events which may change the set of
+// master / ovn-central node addresses
+func nodeChangedPredicate() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, okOld := e.ObjectOld.(*corev1.Node)
+			newNode, okNew := e.ObjectNew.(*corev1.Node)
+			if !okOld || !okNew {
+				return false
+			}
+			return !reflect.DeepEqual(oldNode.GetLabels(), newNode.GetLabels()) ||
+				nodeInternalIP(*oldNode) != nodeInternalIP(*newNode)
+		},
+	}
 }
 
 // applyObject will check if Config object is not already deploying. If a change is needed then it triggers
@@ -152,6 +179,10 @@ func (r *ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ConfigurationReconciler) applyObject(ctx context.Context, config *kubeovniov1.Configuration) error {
 	if len(config.Status.MatchingNodeAddresses) == 0 {
 		r.Log.WithValues("name", config.Name).Info("waiting for matching master node requirement to be met")
+		return nil
+	}
+	if config.OVNCentralNodesLabelInUse() && len(config.Status.OVNCentralNodeAddresses) == 0 {
+		r.Log.WithValues("name", config.Name, "nodesLabel", config.Spec.OVNCentral.NodesLabel).Info("waiting for nodes matching ovnCentral.nodesLabel")
 		return nil
 	}
 	if config.Status.Status == kubeovniov1.ConfigurationStatusDeploying {
@@ -413,19 +444,10 @@ func (r *ConfigurationReconciler) findMasterNodes(ctx context.Context, config *k
 	if err != nil {
 		return fmt.Errorf("error parsing label selector %s: %v", config.Spec.MasterNodesLabel, true)
 	}
-	nodeList := &corev1.NodeList{}
 
-	err = r.List(ctx, nodeList, client.MatchingLabels(set))
+	nodeAddresses, err := r.listNodeAddresses(ctx, client.MatchingLabels(set))
 	if err != nil {
-		return fmt.Errorf("error listing nodes :%v", err)
-	}
-
-	var nodeAddresses []string
-	for _, v := range nodeList.Items {
-		address := nodeInternalIP(v)
-		if len(address) > 0 {
-			nodeAddresses = append(nodeAddresses, address)
-		}
+		return err
 	}
 
 	// if no nodeAddresses are found then it is likely we had no matching nodes
@@ -441,7 +463,61 @@ func (r *ConfigurationReconciler) findMasterNodes(ctx context.Context, config *k
 		config.SetCondition(kubeovniov1.WaitingForMatchignNodesCondition, metav1.ConditionFalse, fmt.Sprintf("found nodes %s", strings.Join(nodeAddresses, ",")), kubeovniov1.NodesFoundReason)
 		config.Status.MatchingNodeAddresses = nodeAddresses
 	}
+	return r.findOVNCentralNodes(ctx, config)
+}
+
+// findOVNCentralNodes populates status.ovnCentralNodeAddresses with the addresses of the nodes
+// hosting the ovn-central raft members. When spec.ovnCentral.nodesLabel is empty (or ignored in hcp/single mode) this mirrors
+// status.matchingNodeAddresses (previous behavior).
+func (r *ConfigurationReconciler) findOVNCentralNodes(ctx context.Context, config *kubeovniov1.Configuration) error {
+	if !config.OVNCentralNodesLabelInUse() {
+		if !slices.Equal(config.Status.OVNCentralNodeAddresses, config.Status.MatchingNodeAddresses) {
+			config.Status.OVNCentralNodeAddresses = slices.Clone(config.Status.MatchingNodeAddresses)
+		}
+		return nil
+	}
+
+	nodeAddresses, err := r.listNodeAddresses(ctx, nodesLabelSelector(config.Spec.OVNCentral.NodesLabel))
+	if err != nil {
+		return err
+	}
+
+	if len(nodeAddresses) == 0 {
+		r.EventRecorder.Event(config, corev1.EventTypeWarning,
+			"ReconcilePaused", fmt.Sprintf("no nodes matching ovnCentral.nodesLabel %s found", config.Spec.OVNCentral.NodesLabel))
+	}
+
+	if !addressArrayEqual(nodeAddresses, config.Status.OVNCentralNodeAddresses) {
+		config.Status.OVNCentralNodeAddresses = nodeAddresses
+	}
 	return nil
+}
+
+// listNodeAddresses returns the internal ip addresses of the nodes matching the list options
+func (r *ConfigurationReconciler) listNodeAddresses(ctx context.Context, opts ...client.ListOption) ([]string, error) {
+	nodeList := &corev1.NodeList{}
+	if err := r.List(ctx, nodeList, opts...); err != nil {
+		return nil, fmt.Errorf("error listing nodes :%v", err)
+	}
+
+	var nodeAddresses []string
+	for _, v := range nodeList.Items {
+		address := nodeInternalIP(v)
+		if len(address) > 0 {
+			nodeAddresses = append(nodeAddresses, address)
+		}
+	}
+	return nodeAddresses, nil
+}
+
+// nodesLabelSelector converts a "key=value" or "key" label into a node list option.
+// The parsing mirrors the node affinity generated for ovn-central by the render package.
+func nodesLabelSelector(label string) client.ListOption {
+	key, value, found := strings.Cut(label, "=")
+	if !found {
+		return client.HasLabels{key}
+	}
+	return client.MatchingLabels{key: value}
 }
 
 // initializeConditions will initialise baseline conditions for the configuration object
