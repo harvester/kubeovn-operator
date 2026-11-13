@@ -186,6 +186,11 @@ metadata:
     kubernetes.io/description: |
       This daemon set launches the kube-ovn cni daemon.
 spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: kube-ovn-cni
@@ -209,6 +214,9 @@ spec:
       hostNetwork: true
       hostPID: true
       securityContext:
+        {{- if .Values.components.enableTProxy }}
+        fsGroup: 65534
+        {{- end }}
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -220,6 +228,9 @@ spec:
           - -xec
           - |
             chmod +t /usr/local/sbin
+            chown -R nobody: /var/log/kube-ovn
+            chown 0:65534 /run/kube-ovn-ipsec-protection
+            chmod 0750 /run/kube-ovn-ipsec-protection
             iptables -V
         securityContext:
           allowPrivilegeEscalation: true
@@ -230,6 +241,8 @@ spec:
           runAsUser: 0
           runAsGroup: 0
         volumeMounts:
+          - name: ipsec-protection
+            mountPath: /run/kube-ovn-ipsec-protection
           - name: usr-local-sbin
             mountPath: /usr/local/sbin
           - mountPath: /run/xtables.lock
@@ -245,6 +258,7 @@ spec:
         imagePullPolicy: {{ .Values.imagePullPolicy }}
         command:
           - /kube-ovn/install-cni.sh
+          - --install-cni-plugins={{ .Values.cniConf.installCNIPlugins }}
           - --cni-conf-dir={{ .Values.cniConf.cniConfigDir }}
           - --cni-conf-file={{ .Values.cniConf.cniConfFile }}
           - --cni-conf-name={{- .Values.cniConf.cniConfigPriority -}}-kube-ovn.conflist
@@ -265,6 +279,56 @@ spec:
           - mountPath: /usr/local/bin
             name: local-bin
           {{- end }}
+      {{- if not .Values.components.enableOVNIPSec }}
+      - name: ipsec-cleanup
+        image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command:
+          - /kube-ovn/kube-ovn-ipsec
+        args:
+          - --cleanup-only
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 65534
+          privileged: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - NET_ADMIN
+              - NET_BIND_SERVICE
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_UID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.uid
+        volumeMounts:
+          - name: ipsec-protection
+            mountPath: /run/kube-ovn-ipsec-protection
+          - name: ovs-ipsec-keys
+            mountPath: /etc/ovs_ipsec_keys
+          - name: host-run-ovs
+            mountPath: /run/openvswitch
+            readOnly: true
+        resources:
+          requests:
+            cpu: {{ index .Values "ipsec" "resources" "requests" "cpu" }}
+            memory: {{ index .Values "ipsec" "resources" "requests" "memory" }}
+            ephemeral-storage: {{ index .Values "ipsec" "resources" "requests" "ephemeralStorage" }}
+          limits:
+            cpu: {{ index .Values "ipsec" "resources" "limits" "cpu" }}
+            memory: {{ index .Values "ipsec" "resources" "limits" "memory" }}
+            ephemeral-storage: {{ index .Values "ipsec" "resources" "limits" "ephemeralStorage" }}
+      {{- end }}
       containers:
       - name: cni-server
         image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
@@ -293,35 +357,52 @@ spec:
           - --dpdk-tunnel-iface={{- .Values.networking.dpdkTunnelInterface | default "br-phy"}}
           - --network-type={{- .Values.networking.tunnelType }}
           - --default-interface-name={{- .Values.networking.vlan.vlanInterface | default ""}}
+          {{- if .Values.networking.externalGatewaySwitch }}
+          - --external-gateway-switch={{- .Values.networking.externalGatewaySwitch }}
+          {{- end }}
           - --logtostderr=false
           - --alsologtostderr=true
           - --log_file=/var/log/kube-ovn/kube-ovn-cni.log
           - --log_file_max_size=200
           - --enable-metrics={{- .Values.networking.enableMetrics }}
+          {{- if .Values.networking.gatewayNetfilterMode }}
+          - --gateway-netfilter-mode={{- .Values.networking.gatewayNetfilterMode }}
+          {{- end }}
+          {{- if .Values.networking.kubeProxyModeEndpoint }}
+          - --kube-proxy-mode-endpoint={{- .Values.networking.kubeProxyModeEndpoint }}
+          {{- end }}
+          {{- if .Values.networking.gatewayNetfilterDetectTimeout }}
+          - --gateway-netfilter-detect-timeout={{- .Values.networking.gatewayNetfilterDetectTimeout }}
+          {{- end }}
+          {{ if .Values.networking.nodeLocalDNSIPS -}}
+          - --node-local-dns-ip={{- .Values.networking.nodeLocalDNSIPS }}
+          {{- end }}
           - --kubelet-dir={{ .Values.kubeletConfig.kubeletDir }}
           - --enable-tproxy={{ .Values.components.enableTProxy }}
-          - --ovs-vsctl-concurrency={{ .Values.performance.ovsVSCtlConcurrency }}
+          - --enable-recompute={{ .Values.components.enableRecompute }}
           - --secure-serving={{- .Values.components.secureServing }}
           {{- if or .Values.networking.tlsMinVersion .Values.networking.tlsMaxVersion .Values.networking.tlsCipherSuites }}
           {{- include "kubeovn.componentTLSArgs" . | nindent 10 }}
           {{- end }}
-          - --enable-ovn-ipsec={{- .Values.components.enableOVNIPSec }}
+          - --set-geneve-tx-off={{- .Values.components.setGeneveTxOff }}
           - --set-vxlan-tx-off={{- .Values.components.setVLANTxOff }}
+          - --host-tunnel-src={{- .Values.components.hostTunnelSrc | default false }}
           - --non-primary-cni-mode={{- .Values.cniConf.nonPrimaryCNI }}
           - --enable-acl-sampling={{- .Values.aclSamplingSpec.enabled }}
           - --acl-sampling-set-id={{- .Values.aclSamplingSpec.setID }}
           - --acl-sampling-local-group-id={{- .Values.aclSamplingSpec.localGroupID }}
         securityContext:
-          runAsUser: 0
+          runAsGroup: {{ include "kubeovn.runAsUser" . }}
+          runAsUser: {{ include "kubeovn.runAsUser" . }}
           privileged: false
+          allowPrivilegeEscalation: true
           capabilities:
+            drop:
+              - SYS_NICE
             add:
               - NET_ADMIN
               - NET_BIND_SERVICE
               - NET_RAW
-              - SYS_ADMIN
-              - SYS_PTRACE
-              - SYS_NICE
         env:
           - name: ENABLE_SSL
             value: "{{ .Values.networking.enableSSL }}"
@@ -350,6 +431,10 @@ spec:
           - name: DBUS_SYSTEM_BUS_ADDRESS
             value: "unix:path=/host/var/run/dbus/system_bus_socket"
         volumeMounts:
+          {{- if .Values.components.enableTProxy }}
+          - name: tproxy-socket
+            mountPath: /run/kube-ovn-tproxy
+          {{- end }}
           - name: usr-local-sbin
             mountPath: /usr/local/sbin
           - name: host-modules
@@ -383,10 +468,6 @@ spec:
           - mountPath: /etc/localtime
             name: localtime
             readOnly: true
-        {{- if .Values.components.enableOVNIPSec }}
-          - mountPath: /etc/ovs_ipsec_keys
-            name: ovs-ipsec-keys
-        {{- end }}
         readinessProbe:
           failureThreshold: 3
           periodSeconds: 7
@@ -414,9 +495,120 @@ spec:
             cpu: {{ index .Values "kubeOvnCNI" "limits" "cpu" }}
             memory: {{ index .Values "kubeOvnCNI" "limits" "memory" }}
             ephemeral-storage: {{ index .Values "kubeOvnCNI" "limits" "ephemeralStorage" }}
+      {{- if .Values.components.enableTProxy }}
+      - name: tproxy
+        image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command:
+          - /kube-ovn/kube-ovn-tproxy
+        securityContext:
+          runAsUser: 65534
+          runAsNonRoot: true
+          runAsGroup: 0
+          privileged: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - SYS_ADMIN
+        volumeMounts:
+          - name: tproxy-socket
+            mountPath: /run/kube-ovn-tproxy
+          - name: host-run-ovs
+            mountPath: /run/openvswitch
+            readOnly: true
+          - name: host-ns
+            mountPath: /var/run/netns
+            readOnly: true
+            mountPropagation: HostToContainer
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      {{- end }}
+      {{- if .Values.components.enableOVNIPSec }}
+      - name: ipsec
+        image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+          - /kube-ovn/kube-ovn-ipsec
+        args:
+          - --ovn-ipsec-cert-duration={{ .Values.ipsec.certificateDuration | int64 }}
+          - --request-timeout={{ .Values.ipsec.requestTimeout }}
+          - --priority={{ .Values.ipsec.priority }}
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 65534
+          privileged: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - NET_ADMIN
+              - NET_BIND_SERVICE
+              - SYS_NICE
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_UID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.uid
+        volumeMounts:
+          - name: ipsec-protection
+            mountPath: /run/kube-ovn-ipsec-protection
+          - name: ovs-ipsec-keys
+            mountPath: /etc/ovs_ipsec_keys
+          - name: host-run-ovs
+            mountPath: /run/openvswitch
+            readOnly: true
+        startupProbe:
+          exec:
+            command: [/kube-ovn/kube-ovn-ipsec, --check=livez]
+          failureThreshold: 60
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command: [/kube-ovn/kube-ovn-ipsec, --check=livez]
+          periodSeconds: 10
+          timeoutSeconds: 3
+        readinessProbe:
+          exec:
+            command: [/kube-ovn/kube-ovn-ipsec, --check=readyz]
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          requests:
+            cpu: {{ index .Values "ipsec" "resources" "requests" "cpu" }}
+            memory: {{ index .Values "ipsec" "resources" "requests" "memory" }}
+            ephemeral-storage: {{ index .Values "ipsec" "resources" "requests" "ephemeralStorage" }}
+          limits:
+            cpu: {{ index .Values "ipsec" "resources" "limits" "cpu" }}
+            memory: {{ index .Values "ipsec" "resources" "limits" "memory" }}
+            ephemeral-storage: {{ index .Values "ipsec" "resources" "limits" "ephemeralStorage" }}
+      {{- end }}
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
+        - name: ipsec-protection
+          hostPath:
+            path: /run/kube-ovn-ipsec-protection
+            type: DirectoryOrCreate
+        {{- if .Values.components.enableTProxy }}
+        - name: tproxy-socket
+          emptyDir: {}
+        {{- end }}
         - name: usr-local-sbin
           emptyDir: {}
         - name: host-modules
@@ -467,11 +659,11 @@ spec:
           hostPath:
             path: {{ .Values.cniConfig.mountLocalBinDir }}
         {{- end }}
-        {{- if .Values.components.enableOVNIPSec }}
         - name: ovs-ipsec-keys
           hostPath:
             path: {{ .Values.ovnIPSecKeysDir }}
-        {{- end }}`
+            type: DirectoryOrCreate
+        `
 
 	ovs_ovn_daemonset = `kind: DaemonSet
 apiVersion: apps/v1
@@ -528,6 +720,8 @@ spec:
             - |
               chmod +t /usr/local/sbin
               chown -R nobody: /var/run/ovn /var/log/ovn /etc/openvswitch /var/run/openvswitch /var/log/openvswitch
+              chown 0:65534 /run/kube-ovn-ipsec-protection
+              chmod 0750 /run/kube-ovn-ipsec-protection
               iptables -V
               {{- if not .Values.disableModulesManagement }}
               /usr/share/openvswitch/scripts/ovs-ctl load-kmod
@@ -555,6 +749,8 @@ spec:
               name: host-run-ovn
             - mountPath: /etc/openvswitch
               name: host-config-openvswitch
+            - mountPath: /run/kube-ovn-ipsec-protection
+              name: ipsec-protection
             - mountPath: /var/run/openvswitch
               name: host-run-ovs
             - mountPath: /var/log/openvswitch
@@ -566,6 +762,7 @@ spec:
           command: ["/kube-ovn/start-ovs.sh"]
           securityContext:
             runAsUser: {{ include "kubeovn.runAsUser" . }}
+            runAsGroup: 65534
             privileged: false
             capabilities:
               add:
@@ -575,6 +772,8 @@ spec:
                 - SYS_NICE
                 - SYS_ADMIN
           env:
+            - name: ENABLE_OVN_IPSEC
+              value: "{{ .Values.components.enableOVNIPSec }}"
             - name: ENABLE_SSL
               value: "{{ .Values.networking.enableSSL }}"
             - name: POD_IP
@@ -597,18 +796,18 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-                        {{- if index .Values "ovnCentral" "hcp" "enabled" }}
+            {{ if index .Values "ovnCentral" "hcp" "enabled" }}
             - name: OVN_SB_ADDR
               value: "{{ include "kubeovn.ovnSbAddress" . }}"
-            {{- else if eq .Values.installMode "dataPlaneOnly" }}
+            {{ else if eq .Values.installMode "dataPlaneOnly" }}
             - name: OVN_SB_ADDR
               value: "{{ include "kubeovn.externalOvnSbAddress" . }}"
-            {{- else }}
+            {{ else }}
             - name: OVN_DB_IPS
               value: "{{ include "kubeovn.ovnCentralNodeIPs" . }}"
             - name: KUBE_OVN_SB_PORT
               value: "{{ include "kubeovn.ovnSbPort" . }}"
-            {{- end }}
+            {{ end }}
             - name: OVN_REMOTE_PROBE_INTERVAL
               value: "{{ .Values.networking.ovnRemoteProbeInterval }}"
             - name: OVN_REMOTE_OPENFLOW_INTERVAL
@@ -618,6 +817,9 @@ spec:
               name: usr-local-sbin
             - mountPath: /lib/modules
               name: host-modules
+              readOnly: true
+            - mountPath: /run/kube-ovn-ipsec-protection
+              name: ipsec-protection
               readOnly: true
             - mountPath: /var/run/openvswitch
               name: host-run-ovs
@@ -665,6 +867,10 @@ spec:
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
+        - name: ipsec-protection
+          hostPath:
+            path: /run/kube-ovn-ipsec-protection
+            type: DirectoryOrCreate
         - name: usr-local-sbin
           emptyDir: {}
         - name: host-modules
@@ -924,9 +1130,12 @@ spec:
             - --neighbor-ipv6-address={{ .Values.bgp.neighborV6Address | default "2001:db8::1" }}
             - --neighbor-as={{ .Values.bgp.neighborAS | default 64512 | int64 }}
             - --cluster-as={{ .Values.bgp.clusterAS | default 64513 | int64 }}
-            {{- if .Values.bgp.routerID }}
-             - --router-id={{ .Values.bgp.routerID }}
-            {{- end }}
+            {{ if .Values.bgp.nextHops }}
+            - --next-hops={{ .Values.bgp.nextHops }}
+            {{ end }}
+            {{ if .Values.bgp.routerID }}
+            - --router-id={{ .Values.bgp.routerID }}
+            {{ end }}
           env:
             - name: NODE_NAME
               valueFrom:
@@ -956,5 +1165,111 @@ spec:
             path: {{ .Values.logConfig.logDir }}/kube-ovn
             type: DirectoryOrCreate`
 
-	DaemonsetList = []string{ovs_ovn_dpdk_daemonset, kube_ovn_cni_daemonset, ovs_ovn_daemonset, kube_ovn_pinger_daemonsets, kube_ovn_speaker_daemonset}
+	kubectl_ko_nodeagent_daemonset = `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kubectl-ko-node-agent
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: kubectl-ko-node-agent
+    component: diagnostics
+spec:
+  selector:
+    matchLabels:
+      app: kubectl-ko-node-agent
+  template:
+    metadata:
+      labels:
+        app: kubectl-ko-node-agent
+        component: diagnostics
+    spec:
+      hostNetwork: true
+      hostPID: true
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      nodeSelector:
+        kubernetes.io/os: linux
+      automountServiceAccountToken: false
+      {{- if .Values.global.registry.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range $index, $secret := .Values.global.registry.imagePullSecrets }}
+      {{- if $secret }}
+        - name: {{ $secret | quote }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: {{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/kube-ovn/kubectl-ko-node-agent"]
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          volumeMounts:
+            - name: host-run-ovn
+              mountPath: /var/run/ovn
+            - name: host-run-ovs
+              mountPath: /var/run/openvswitch
+              mountPropagation: HostToContainer
+            - name: host-netns
+              mountPath: /var/run/netns
+              mountPropagation: HostToContainer
+            - name: host-etc-ovn
+              mountPath: /etc/ovn
+            - name: host-logs-ovn
+              mountPath: /var/log/ovn
+              readOnly: true
+            - name: host-logs-ovs
+              mountPath: /var/log/openvswitch
+              readOnly: true
+            - name: host-logs-kube-ovn
+              mountPath: /var/log/kube-ovn
+              readOnly: true
+            - name: host-cni-conf
+              mountPath: /etc/cni/net.d
+              readOnly: true
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+      volumes:
+        - name: host-run-ovn
+          hostPath:
+            path: /run/ovn
+            type: DirectoryOrCreate
+        - name: host-run-ovs
+          hostPath:
+            path: /run/openvswitch
+            type: DirectoryOrCreate
+        - name: host-netns
+          hostPath:
+            path: /var/run/netns
+            type: DirectoryOrCreate
+        - name: host-etc-ovn
+          hostPath:
+            path: {{ .Values.ovnDir }}
+            type: DirectoryOrCreate
+        - name: host-logs-ovn
+          hostPath:
+            path: {{ .Values.logConfig.logDir }}/ovn
+            type: DirectoryOrCreate
+        - name: host-logs-ovs
+          hostPath:
+            path: {{ .Values.logConfig.logDir }}/openvswitch
+            type: DirectoryOrCreate
+        - name: host-logs-kube-ovn
+          hostPath:
+            path: {{ .Values.logConfig.logDir }}/kube-ovn
+            type: DirectoryOrCreate
+        - name: host-cni-conf
+          hostPath:
+            path: {{ .Values.cniConf.cniConfigDir }}
+            type: DirectoryOrCreate
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory`
+
+	DaemonsetList = []string{ovs_ovn_dpdk_daemonset, kube_ovn_cni_daemonset, ovs_ovn_daemonset, kube_ovn_pinger_daemonsets, kube_ovn_speaker_daemonset, kubectl_ko_nodeagent_daemonset}
 )

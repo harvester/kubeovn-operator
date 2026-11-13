@@ -125,6 +125,9 @@ spec:
                   cniConfigPriority:
                     default: "01"
                     type: string
+                  installCNIPlugins:
+                    default: true
+                    type: boolean
                   localBinDir:
                     default: /usr/local/bin
                     type: string
@@ -163,6 +166,12 @@ spec:
                   enableExternalVPC:
                     default: true
                     type: boolean
+                  enableGwNftableLBSvc:
+                    default: false
+                    type: boolean
+                  enableGwNftableSvcClusterIP:
+                    default: false
+                    type: boolean
                   enableIC:
                     default: false
                     type: boolean
@@ -187,13 +196,16 @@ spec:
                   enableOVNIPSec:
                     default: false
                     type: boolean
-                  enableOVNLBPreferLocal:
+                  enableRecompute:
                     default: false
                     type: boolean
                   enableTProxy:
                     default: false
                     type: boolean
                   hardwareOffload:
+                    default: false
+                    type: boolean
+                  hostTunnelSrc:
                     default: false
                     type: boolean
                   logicalGateway:
@@ -209,6 +221,9 @@ spec:
                     default: standard
                     type: string
                   secureServing:
+                    default: false
+                    type: boolean
+                  setGeneveTxOff:
                     default: false
                     type: boolean
                   setVLANTxOff:
@@ -243,7 +258,7 @@ spec:
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
               dpdkImageTag:
-                default: v1.16.4-dpdk
+                default: v1.16.0-dpdk
                 type: string
               dpdkMEMORY:
                 anyOf:
@@ -364,6 +379,98 @@ spec:
                 - controlPlaneOnly
                 - dataPlaneOnly
                 type: string
+              ipsec:
+                default: {}
+                description: Dedicated node IPsec container, rendered when the existing
+                  IPsec feature is enabled.
+                properties:
+                  certManager:
+                    default: {}
+                    properties:
+                      enabled:
+                        default: false
+                        type: boolean
+                      issuerName:
+                        default: kube-ovn
+                        type: string
+                    type: object
+                  certificateDuration:
+                    default: 63072000
+                    description: CertificateDuration is in seconds.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  priority:
+                    default: -5
+                    description: Priority controls daemonset pod priority class value
+                      or scheduling preference.
+                    format: int32
+                    type: integer
+                  requestTimeout:
+                    default: 300s
+                    description: 'RequestTimeout is a Go duration string (for example:
+                      "300s", "5m").'
+                    type: string
+                  resources:
+                    default:
+                      limits:
+                        cpu: 1000m
+                        memory: 256Mi
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+                    properties:
+                      limits:
+                        default:
+                          cpu: 2
+                          ephemeralStorage: 1Gi
+                          memory: 1000Mi
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          ephemeralStorage:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        type: object
+                      requests:
+                        default:
+                          cpu: 200m
+                          memory: 200Mi
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          ephemeralStorage:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                type: object
               ipv4:
                 default:
                   joinCIDR: 100.64.0.0/16
@@ -562,6 +669,7 @@ spec:
                   limits:
                     cpu: 200m
                     memory: 200Mi
+                  replicas: 1
                   requests:
                     cpu: 200m
                     memory: 200Mi
@@ -591,6 +699,9 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                     type: object
+                  replicas:
+                    default: 1
+                    type: integer
                   requests:
                     default:
                       cpu: 200m
@@ -615,6 +726,8 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                     type: object
+                required:
+                - replicas
                 type: object
               kubeOvnPinger:
                 default:
@@ -726,7 +839,21 @@ spec:
                   externalGatewayConfigNS:
                     default: ""
                     type: string
+                  externalGatewaySwitch:
+                    default: ""
+                    description: The name of the external gateway switch (OVS bridge
+                      providing external network).
+                    type: string
+                  gatewayNetfilterDetectTimeout:
+                    default: ""
+                    type: string
+                  gatewayNetfilterMode:
+                    default: ""
+                    type: string
                   interface:
+                    type: string
+                  kubeProxyModeEndpoint:
+                    default: ""
                     type: string
                   netStack:
                     default: ipv4
@@ -1090,10 +1217,6 @@ spec:
                   inspectInterval:
                     default: 20
                     minimum: 1
-                    type: integer
-                  ovsVSCtlConcurrency:
-                    default: 100
-                    minimum: 0
                     type: integer
                 type: object
             type: object

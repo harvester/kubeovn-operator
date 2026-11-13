@@ -87,5 +87,40 @@ subjects:
     name: ovn-central
     namespace: {{ include "kubeovn.centralNamespace" . }}
 {{- end }}`
-	RoleBindingList = []string{kube_ovn_cni_rolebinding, kube_ovn_app_rolebinding, kube_ovn_cni_secret_reader_rolebinding, ovn_rolebinding, ovn_ipsec_rolebinding, ovn_central_rolebinding}
+
+	controller_sec_rolebinding = `
+{{- if include "kubeovn.renderDataPlane" . }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kube-ovn-controller-secrets
+  namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kube-ovn-controller-secrets
+subjects:
+  - kind: ServiceAccount
+    name: kube-ovn-controller
+    namespace: {{ .Values.namespace }}
+{{- end }}`
+
+	ovn_controller_rolebinding = `
+{{- if include "kubeovn.renderDataPlane" . }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kube-ovn-controller
+  namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: kube-ovn-controller
+    namespace: {{ .Values.namespace }}
+{{- end }}`
+
+	RoleBindingList = []string{kube_ovn_cni_rolebinding, kube_ovn_app_rolebinding, kube_ovn_cni_secret_reader_rolebinding, ovn_rolebinding, ovn_ipsec_rolebinding, ovn_central_rolebinding, controller_sec_rolebinding, ovn_controller_rolebinding}
 )
