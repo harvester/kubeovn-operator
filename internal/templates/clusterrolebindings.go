@@ -53,5 +53,20 @@ subjects:
     name: kube-ovn-app
     namespace: {{ .Values.namespace }}`
 
-	ClusterRoleBindingList = []string{system_ovn_clusterrolebinding, ovn_ovs_clusterrolebinding, system_kube_ovn_cni_clusterrolebinding, system_kube_ovn_app_clusterrolebinding}
+	system_kube_ovn_controller_clusterrolebinding = `
+{{- if include "kubeovn.renderDataPlane" . }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-ovn-controller
+roleRef:
+  name: system:ovn
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: kube-ovn-controller
+    namespace: {{ .Values.namespace }}
+{{- end }}`
+	ClusterRoleBindingList = []string{system_ovn_clusterrolebinding, ovn_ovs_clusterrolebinding, system_kube_ovn_cni_clusterrolebinding, system_kube_ovn_app_clusterrolebinding, system_kube_ovn_controller_clusterrolebinding, system_kube_ovn_controller_clusterrolebinding}
 )
