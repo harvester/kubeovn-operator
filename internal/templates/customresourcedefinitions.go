@@ -612,20 +612,35 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.namespace
+      name: Namespace
+      type: string
     - jsonPath: .spec.vpc
       name: Vpc
       type: string
     - jsonPath: .spec.subnet
       name: Subnet
       type: string
-    - jsonPath: .spec.lanIp
-      name: LanIP
+    - jsonPath: .status.lanIp
+      name: IPs
       type: string
+    - jsonPath: .spec.replicas
+      name: Replicas
+      type: integer
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    - jsonPath: .spec.bfd.enabled
+      name: BFD
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
         description: |-
-          VpcNatGateway represents a NAT gateway for a VPC, implemented as a StatefulSet Pod.
+          VpcNatGateway represents a NAT gateway for a VPC, implemented by a StatefulSet in non-HA mode or a Deployment in HA mode.
 
           Architecture note:
           The NAT gateway Pod does NOT support hot updates. Any changes to Spec fields (ExternalSubnets,
@@ -635,7 +650,9 @@ spec:
            2. Runtime state (vpc_cidrs, init status) is managed by separate handlers and will be
               automatically restored after Pod recreation through the normal reconciliation flow
 
-          The only exception is QoSPolicy, which can be updated without Pod restart.
+          QoSPolicy updates are applied without restarting the Pod. Every other Spec change,
+          including the one-time persistence of a dynamically allocated LanIP, updates the
+          workload template and therefore recreates the Pod.
         properties:
           apiVersion:
             description: |-
@@ -1575,6 +1592,46 @@ spec:
                   User-defined annotations for the StatefulSet NAT gateway Pod template.
                   Only effective at creation time; updates to this field are not detected.
                 type: object
+              bfd:
+                description: BFD configuration for health monitoring and automatic
+                  failover (HA mode only)
+                properties:
+                  enabled:
+                    default: false
+                    description: |-
+                      Enable BFD health monitoring
+                      When enabled, each gateway instance establishes a BFD session with the VPC's BFD port.
+                      The VPC's spec.bfd.enabled must also be set to true.
+                    type: boolean
+                  minRX:
+                    default: 1000
+                    description: |-
+                      BFD minimum receive interval in milliseconds
+                      This is the minimum interval at which this gateway expects to receive BFD control packets.
+                    format: int32
+                    maximum: 3600000
+                    minimum: 1
+                    type: integer
+                  minTX:
+                    default: 1000
+                    description: |-
+                      BFD minimum transmit interval in milliseconds
+                      This is the minimum interval at which this gateway will send BFD control packets.
+                    format: int32
+                    maximum: 3600000
+                    minimum: 1
+                    type: integer
+                  multiplier:
+                    default: 3
+                    description: |-
+                      BFD detection multiplier
+                      Number of missed BFD packets before declaring the session down.
+                      Detection time = MinRX * Multiplier
+                    format: int32
+                    maximum: 255
+                    minimum: 1
+                    type: integer
+                type: object
               bgpSpeaker:
                 description: BGP speaker configuration
                 properties:
@@ -1617,9 +1674,37 @@ spec:
                 items:
                   type: string
                 type: array
+              internalCIDRs:
+                description: |-
+                  Internal CIDRs for OVN route injection.
+                  Traffic from these CIDRs destined for 0.0.0.0/0 or ::/0 will be routed to NAT gateway instances.
+                  This field is cumulative with internalSubnets.
+                items:
+                  type: string
+                type: array
+              internalSubnets:
+                description: |-
+                  Internal subnets by name (resolved to CIDRs) for OVN route injection.
+                  Traffic from these subnets destined for 0.0.0.0/0 or ::/0 will be routed to NAT gateway instances.
+                  This field is cumulative with internalCIDRs.
+                items:
+                  type: string
+                type: array
               lanIp:
-                description: LAN IP address for the NAT gateway. This field is immutable
-                  after creation.
+                description: |-
+                  LAN IP address for the NAT gateway. Used only when Replicas = 1 (non-HA mode).
+                  If empty, an address is allocated dynamically and persisted here after it is observed on the Pod.
+                  Once set, this field is immutable.
+                  In HA mode (Replicas > 1) this field is ignored and cannot be used to pin addresses: every
+                  replica allocates its own address dynamically, and the controller re-points the OVN policy
+                  routes and BFD sessions whenever a replica is replaced.
+                  iptables EIP/FIP/DNAT/SNAT do not fully support IPv6 yet. Once they do, consider
+                  adding a v6LanIp field to pin the IPv6 LAN address separately.
+                type: string
+              namespace:
+                description: |-
+                  Namespace where the NAT gateway StatefulSet/Pod will be created.
+                  If empty, defaults to the kube-ovn controller's own namespace (typically kube-system).
                 type: string
               noDefaultEIP:
                 description: Disable default EIP assignment
@@ -1627,6 +1712,15 @@ spec:
               qosPolicy:
                 description: QoS policy name to apply to the NAT gateway
                 type: string
+              replicas:
+                default: 1
+                description: |-
+                  Number of gateway replicas for HA support.
+                  When > 1, uses Deployment workload with pod anti-affinity to distribute instances across nodes.
+                  When = 1 or unset, uses StatefulSet workload (legacy mode) for backward compatibility.
+                format: int32
+                minimum: 1
+                type: integer
               routes:
                 description: Static routes for the NAT gateway
                 items:
@@ -2611,9 +2705,32 @@ spec:
                 items:
                   type: string
                 type: array
+              internalCIDRs:
+                description: Internal CIDRs configured for OVN route injection
+                items:
+                  type: string
+                type: array
+              internalSubnets:
+                description: Internal subnets configured for OVN route injection
+                items:
+                  type: string
+                type: array
+              lanIp:
+                description: |-
+                  LAN IP address(es) observed on the NAT gateway Pods.
+                  For non-HA, this is the single address persisted to spec.lanIp.
+                  For HA, this is a comma-separated, sorted list of all observed addresses.
+                type: string
               qosPolicy:
                 description: QoS policy applied to the NAT gateway
                 type: string
+              ready:
+                description: Ready state of the NAT gateway
+                type: boolean
+              replicas:
+                description: Number of gateway replicas
+                format: int32
+                type: integer
               selector:
                 description: Pod selector configured for the NAT gateway
                 items:
@@ -2658,6 +2775,24 @@ spec:
                       type: string
                   type: object
                 type: array
+              workload:
+                description: Workload information (Deployment or StatefulSet)
+                properties:
+                  apiVersion:
+                    description: API version of the workload (e.g., "apps/v1")
+                    type: string
+                  kind:
+                    description: Kind of the workload ("Deployment" or "StatefulSet")
+                    type: string
+                  name:
+                    description: Name of the workload
+                    type: string
+                  nodes:
+                    description: Nodes where gateway instances are running
+                    items:
+                      type: string
+                    type: array
+                type: object
             type: object
         type: object
     served: true
@@ -2686,37 +2821,37 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.vpc
-      name: VPC
+      name: Vpc
       type: string
     - jsonPath: .spec.replicas
-      name: REPLICAS
+      name: Replicas
       type: integer
     - jsonPath: .spec.bfd.enabled
-      name: BFD ENABLED
+      name: bfd
       type: boolean
     - jsonPath: .spec.externalSubnet
-      name: EXTERNAL SUBNET
+      name: External Subnet
       type: string
     - jsonPath: .status.phase
-      name: PHASE
+      name: Phase
       type: string
     - jsonPath: .status.ready
-      name: READY
+      name: Ready
       type: boolean
     - jsonPath: .status.internalIPs
-      name: INTERNAL IPS
+      name: Internal IPs
       priority: 1
       type: string
     - jsonPath: .status.externalIPs
-      name: EXTERNAL IPS
+      name: External IPs
       priority: 1
       type: string
     - jsonPath: .status.workload.nodes
-      name: WORKING NODES
+      name: Working Nodes
       priority: 1
       type: string
     - jsonPath: .metadata.creationTimestamp
-      name: AGE
+      name: Age
       type: date
     name: v1
     schema:
@@ -2818,12 +2953,25 @@ spec:
                   mutually exclusive with externalIPs
                 type: string
               externalIPs:
-                description: External IP addresses for the egress gateway
+                description: |-
+                  External IP addresses for the egress gateway
+                  mutually exclusive with externalIPPool
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
+              externalNetworkMode:
+                default: Attachment
+                description: External network mode. Attachment uses externalSubnet; PrimaryCNI uses the pod's primary network.
+                enum:
+                  - Attachment
+                  - PrimaryCNI
+                type: string
+                x-kubernetes-validations:
+                - message: This field is immutable.
+                  rule: self == oldSelf
               externalSubnet:
-                description: external subnet used to create the workload
+                description: External subnet used to create the workload in Attachment mode.
                 type: string
               image:
                 description: |-
@@ -2840,10 +2988,12 @@ spec:
                 description: |-
                   optional internal/external IPs used to create the workload
                   these IPs must be in the internal/external subnet
-                  the IPs count must NOT be less than the replicas count
+                  when specified, the IPs count must NOT be less than the replicas count
+                  mutually exclusive with internalIPPool
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
               internalSubnet:
                 description: |-
                   optional internal subnet used to create the workload
@@ -3376,10 +3526,21 @@ spec:
                         type: object
                     type: object
                 type: object
+              podAntiAffinity:
+                default: Required
+                description: |-
+                  Pod anti-affinity mode for gateway workload replicas.
+                  Required spreads replicas across nodes and is the default. Preferred allows
+                  co-located replicas but does not provide node-level HA. Changing from
+                  Preferred to Required only takes effect when pods are recreated.
+                enum:
+                - Required
+                - Preferred
+                type: string
               policies:
                 description: |-
                   egress policies
-                  at least one policy must be specified
+                  at least one policy or selector must be specified
                 items:
                   properties:
                     ipBlocks:
@@ -3387,6 +3548,7 @@ spec:
                       items:
                         type: string
                       type: array
+                      x-kubernetes-list-type: set
                     snat:
                       default: false
                       description: whether to enable SNAT/MASQUERADE for the egress
@@ -3396,17 +3558,32 @@ spec:
                       items:
                         type: string
                       type: array
+                      x-kubernetes-list-type: set
                   type: object
+                  x-kubernetes-validations:
+                  - message: Each policy MUST have at least one ipBlocks or subnets
+                    rule: has(self.ipBlocks) || has(self.subnets)
                 type: array
               prefix:
                 description: |-
                   optional name prefix used to generate the workload
                   the workload name will be generated as <prefix><vpc-egress-gateway-name>
+                pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*[-\.]?$
+                type: string
+                x-kubernetes-validations:
+                - message: This field is immutable.
+                  rule: self == oldSelf
+              priorityClassName:
+                description: |-
+                  Optional PriorityClass name applied to the workload pods.
+                  If not specified, the cluster's default Pod priority applies.
                 type: string
               replicas:
                 default: 1
                 description: workload replicas
                 format: int32
+                maximum: 10
+                minimum: 0
                 type: integer
               resources:
                 description: |-
@@ -3522,6 +3699,10 @@ spec:
                           type: object
                       type: object
                       x-kubernetes-map-type: atomic
+                      x-kubernetes-validations:
+                      - message: Each namespace selector MUST have at least one matchLabels
+                          or matchExpressions
+                        rule: has(self.matchLabels) || has(self.matchExpressions)
                     podSelector:
                       description: |-
                         A label selector is a label query over a set of resources. The result of matchLabels and
@@ -3571,6 +3752,10 @@ spec:
                           type: object
                       type: object
                       x-kubernetes-map-type: atomic
+                      x-kubernetes-validations:
+                      - message: Each pod selector MUST have at least one matchLabels
+                          or matchExpressions
+                        rule: has(self.matchLabels) || has(self.matchExpressions)
                   type: object
                 type: array
               tolerations:
@@ -3620,16 +3805,25 @@ spec:
                   if not specified, the default traffic policy "Cluster" will be used
                   if set to "Local", traffic will be routed to the gateway pod/instance on the same node when available
                   currently it works only for the default vpc
+                enum:
+                - Local
+                - Cluster
                 type: string
               vpc:
                 description: |-
                   optional VPC name
                   if not specified, the default VPC will be used
                 type: string
-            required:
-            - externalSubnet
             type: object
             x-kubernetes-validations:
+            - fieldPath: .internalIPs
+              message: Size of Internal IPs MUST be equal to or greater than Replicas
+              rule: '!has(self.internalIPs) || size(self.internalIPs) == 0 || size(self.internalIPs)
+                >= self.replicas'
+            - fieldPath: .externalIPs
+              message: Size of External IPs MUST be equal to or greater than Replicas
+              rule: '!has(self.externalIPs) || size(self.externalIPs) == 0 || size(self.externalIPs)
+                >= self.replicas'
             - fieldPath: .internalIPPool
               message: internalIPs and internalIPPool are mutually exclusive
               rule: '!(has(self.internalIPs) && size(self.internalIPs) != 0 && has(self.internalIPPool)
@@ -3638,6 +3832,22 @@ spec:
               message: externalIPs and externalIPPool are mutually exclusive
               rule: '!(has(self.externalIPs) && size(self.externalIPs) != 0 && has(self.externalIPPool)
                 && size(self.externalIPPool) > 0)'
+            - message: Each VPC Egress Gateway MUST have at least one policy or selector
+              rule: (has(self.policies) && size(self.policies) != 0) || (has(self.selectors)
+                && size(self.selectors) != 0)
+            - message: externalSubnet is required in Attachment mode and forbidden
+                in PrimaryCNI mode
+              rule: 'has(self.externalNetworkMode) && self.externalNetworkMode ==
+                ''PrimaryCNI'' ? !has(self.externalSubnet) || size(self.externalSubnet)
+                == 0 : has(self.externalSubnet) && size(self.externalSubnet) > 0'
+            - message: PrimaryCNI mode does not support external IP allocation, BGP,
+                EVPN, selectors, bandwidth or observability
+              rule: '!has(self.externalNetworkMode) || self.externalNetworkMode !=
+                ''PrimaryCNI'' || ((!has(self.externalIPs) || size(self.externalIPs)
+                == 0) && (!has(self.externalIPPool) || size(self.externalIPPool) ==
+                0) && (!has(self.bgpConf) || size(self.bgpConf) == 0) && (!has(self.evpnConf)
+                || size(self.evpnConf) == 0) && (!has(self.selectors) || size(self.selectors)
+                == 0) && !has(self.bandwidth) && !has(self.observability))'
           status:
             properties:
               conditions:
@@ -3695,6 +3905,10 @@ spec:
                 default: Pending
                 description: Current phase of the egress gateway (Pending, Processing,
                   or Completed)
+                enum:
+                - Pending
+                - Processing
+                - Completed
                 type: string
               ready:
                 default: false
@@ -3703,6 +3917,8 @@ spec:
               replicas:
                 description: used by the scale subresource
                 format: int32
+                maximum: 10
+                minimum: 0
                 type: integer
               workload:
                 description: workload information
@@ -3752,6 +3968,12 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.namespace
+      name: Namespace
+      type: string
+    - jsonPath: .spec.externalSubnet
+      name: ExternalSubnet
+      type: string
     - jsonPath: .status.ip
       name: IP
       type: string
@@ -3795,6 +4017,11 @@ spec:
                 type: string
               macAddress:
                 description: MAC address for the EIP
+                type: string
+              namespace:
+                description: |-
+                  Namespace where the NAT gateway StatefulSet/Pod for this EIP resides.
+                  If empty, defaults to the kube-ovn controller's own namespace.
                 type: string
               natGwDp:
                 description: NAT gateway datapath where the EIP is assigned
@@ -4041,6 +4268,9 @@ spec:
     - jsonPath: .spec.internalPort
       name: InternalPort
       type: string
+    - jsonPath: .spec.type
+      name: Type
+      type: string
     - jsonPath: .status.natGwDp
       name: NatGwDp
       type: string
@@ -4070,8 +4300,13 @@ spec:
             type: object
           spec:
             properties:
+              clusterIP:
+                description: Kubernetes Service ClusterIP served by this rule for
+                  traffic from within the VPC.
+                type: string
               eip:
-                description: EIP name for DNAT rule
+                description: Name of the EIP used as the rule's external address.
+                  Optional when ClusterIP is set.
                 type: string
               externalPort:
                 description: External port number
@@ -4084,6 +4319,45 @@ spec:
                 type: string
               protocol:
                 description: Protocol type (TCP or UDP)
+                type: string
+              sessionAffinity:
+                description: |-
+                  SessionAffinity controls client-IP session affinity for share type DNAT. Only "" (none,
+                  default) and "ClientIP" are supported, and it is rejected for exclusive type. It is
+                  immutable after creation because it applies to the whole share DNAT identity; change it
+                  by deleting and recreating the rule (the nftable LB service controller does this when a
+                  Service's session affinity changes). When set to "ClientIP", connections from the same
+                  client IP are pinned to the same backend for SessionAffinityTimeoutSeconds, implemented
+                  with per-backend nftables affinity sets (kube-proxy nftables pattern).
+                enum:
+                - ""
+                - ClientIP
+                type: string
+              sessionAffinityTimeoutSeconds:
+                description: |-
+                  SessionAffinityTimeoutSeconds is the sticky window, in seconds, for ClientIP affinity.
+                  It is only used when SessionAffinity is "ClientIP"; when unset (0) the controller applies
+                  the default of 10800 (3h). Non-zero values must be in the range 1-86400.
+                format: int32
+                maximum: 86400
+                minimum: 0
+                type: integer
+              type:
+                default: exclusive
+                description: |-
+                  Type of the DNAT rule, controls whether the EIP:Port identity can be shared
+                  by multiple internal backends:
+                  - "exclusive" (default): The EIP:Port is exclusively owned by this single DNAT rule.
+                    Uses iptables DNAT for 1:1 port forwarding. This was the only mode before the
+                    nft LB feature was introduced; any duplicate identity is rejected.
+                  - "share": Multiple DNAT rules may share the same EIP:Port identity, each
+                    contributing a different internal IP:Port as a backend. Traffic is distributed
+                    across backends using nftables numgen random map-based DNAT: each new connection
+                    picks a backend at random and is then pinned by conntrack (connection-level
+                    balancing, no client-IP affinity).
+                enum:
+                - exclusive
+                - share
                 type: string
             type: object
           status:
@@ -4953,6 +5227,9 @@ spec:
     - jsonPath: .status.defaultLogicalSwitch
       name: DefaultSubnet
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
@@ -5793,9 +6070,20 @@ spec:
               routeTable:
                 description: Route table associated with the subnet.
                 type: string
+              routed:
+                description: |-
+                  Routed configures pods with /32 (IPv4) or /128 (IPv6) addresses and
+                  on-link routes to the gateway. Same-subnet traffic is forced through the
+                  OVN logical router instead of direct L2. Requires an OVN logical router
+                  port (overlay, or underlay with logicalGateway / u2oInterconnection).
+                  Existing pods must be recreated after enabling or disabling this field.
+                type: boolean
               u2oFeatures:
+                description: Feature configurations for underlay to overlay interconnection.
                 properties:
                   overlayOnlyRouting:
+                    description: OverlayOnlyRouting controls whether only overlay
+                      CIDRs use U2O routing.
                     type: boolean
                 type: object
               u2oInterconnection:
@@ -5860,6 +6148,12 @@ spec:
               dhcpV4OptionsUUID:
                 type: string
               dhcpV6OptionsUUID:
+                type: string
+              gatewayMAC:
+                description: |-
+                  GatewayMAC is the mac address of the subnet's logical router port, recorded so
+                  the validating webhook can independently verify a switch_lb_rule vip mac repair
+                  (see pkg/webhook/vip.go) without needing access to the controller's in-memory IPAM.
                 type: string
               mcastQuerierIP:
                 type: string
@@ -5980,9 +6274,25 @@ spec:
                 description: EnableAddressSet to work with policy-based routing and
                   ACL
                 type: boolean
+              ipCount:
+                description: |-
+                  Number of addresses to pick automatically from the subnet's free addresses,
+                  per IP family (a dual-stack subnet yields ipCount IPv4 plus ipCount IPv6 addresses).
+                  The picked addresses are recorded in status.ips and stay stable; increasing the
+                  value appends addresses, decreasing it releases the most recently added ones first.
+                  Mutually exclusive with ips.
+                  An ippool carves a small set of addresses out of a subnet; needing more than a few
+                  dozen is better served by a dedicated subnet, or by spelling out ranges in ips.
+                  This bound must stay in sync with maxIPPoolIPCount in the controller, which still
+                  guards pools created before the limit was introduced.
+                format: int32
+                maximum: 32
+                minimum: 1
+                type: integer
               ips:
-                description: IP addresses or ranges in the pool (IPv4/IPv6 addresses
-                  or CIDR ranges)
+                description: |-
+                  IP addresses or ranges in the pool (IPv4/IPv6 addresses or CIDR ranges).
+                  Mutually exclusive with ipCount.
                 items:
                   type: string
                 type: array
@@ -5995,9 +6305,11 @@ spec:
                 description: Subnet name for the IP pool. This field is immutable.
                 type: string
             required:
-            - ips
             - subnet
             type: object
+            x-kubernetes-validations:
+            - message: exactly one of spec.ips and spec.ipCount must be set
+              rule: has(self.ips) != has(self.ipCount)
           status:
             properties:
               conditions:
@@ -6036,6 +6348,15 @@ spec:
                       description: Type of condition.
                       type: string
                   type: object
+                type: array
+              ips:
+                description: |-
+                  IP addresses the pool currently consists of, in allocation order.
+                  Maintained by the controller for pools using spec.ipCount, and cleared when the
+                  pool leaves that mode, so the recorded selection is never mistaken for the
+                  members of a pool that lists spec.ips.
+                items:
+                  type: string
                 type: array
               v4AvailableIPRange:
                 description: Available IPv4 address range
@@ -6121,6 +6442,8 @@ spec:
             properties:
               id:
                 description: VLAN ID (0-4095). This field is immutable after creation.
+                maximum: 4095
+                minimum: 0
                 type: integer
               provider:
                 description: Provider network name. This field is immutable after
@@ -6131,6 +6454,8 @@ spec:
                 type: string
               vlanId:
                 description: deprecated fields, use ID & Provider instead
+                maximum: 4095
+                minimum: 0
                 type: integer
             required:
             - provider
@@ -6323,6 +6648,8 @@ spec:
                 description: Optional explicit list of VLAN interface names to preserve
                   (e.g., eth0.10, bond0.20)
                 items:
+                  maxLength: 15
+                  pattern: ^[a-zA-Z0-9_-]+\.[0-9]{1,4}$
                   type: string
                 type: array
             required:
@@ -6729,5 +7056,143 @@ spec:
     subresources:
       status: {}`
 
-	CRDList = []string{vpc_dnses_crd, switch_lb_rules_crd, vpc_nat_gateways_crd, vpc_egress_gateways_crd, iptables_eips_crd, iptables_fip_rules_crd, iptables_dnat_rules_crd, iptables_snat_rules_crd, ovn_eips_crd, ovn_fips_crd, ovn_snat_rules_crd, ovn_dnat_rules_crd, vpcs_crd, ips_crd, vips_crd, subnets_crd, ippools_crd, vlans_crd, provider_networks_crd, security_groups_crd, qos_policies_crd, bgp_confs_crd, dns_name_resolvers_crd, evpn_confs_crd}
+	router_lb_rules_crd = `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    helm.sh/resource-policy: keep
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: router-lb-rules.kubeovn.io
+spec:
+  group: kubeovn.io
+  names:
+    kind: RouterLBRule
+    listKind: RouterLBRuleList
+    plural: router-lb-rules
+    shortNames:
+    - rlr
+    singular: router-lb-rule
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.ovnEip
+      name: ovnEip
+      type: string
+    - jsonPath: .spec.vpc
+      name: vpc
+      type: string
+    - jsonPath: .status.ports
+      name: port(s)
+      type: string
+    - jsonPath: .status.service
+      name: service
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              endpoints:
+                items:
+                  type: string
+                type: array
+              namespace:
+                type: string
+              ovnEip:
+                type: string
+              ports:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    port:
+                      format: int32
+                      type: integer
+                    protocol:
+                      type: string
+                    targetPort:
+                      format: int32
+                      type: integer
+                  type: object
+                type: array
+              selector:
+                items:
+                  type: string
+                type: array
+              sessionAffinity:
+                type: string
+              vpc:
+                type: string
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  description: Condition describes the state of an object at a certain
+                    point.
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
+                      description: Last time the condition was probed
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition.
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        ObservedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9,
+                        the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type of condition.
+                      type: string
+                  type: object
+                type: array
+              ports:
+                type: string
+              service:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}`
+
+	CRDList = []string{vpc_dnses_crd, switch_lb_rules_crd, vpc_nat_gateways_crd, vpc_egress_gateways_crd, iptables_eips_crd, iptables_fip_rules_crd, iptables_dnat_rules_crd, iptables_snat_rules_crd, ovn_eips_crd, ovn_fips_crd, ovn_snat_rules_crd, ovn_dnat_rules_crd, vpcs_crd, ips_crd, vips_crd, subnets_crd, ippools_crd, vlans_crd, provider_networks_crd, security_groups_crd, qos_policies_crd, bgp_confs_crd, dns_name_resolvers_crd, evpn_confs_crd, router_lb_rules_crd}
 )

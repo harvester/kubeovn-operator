@@ -9,6 +9,7 @@ spec:
     cniConfFile: /kube-ovn/01-kube-ovn.conflist
     cniConfigDir: /etc/cni/net.d
     cniConfigPriority: "90"
+    installCNIPlugins: true
     localBinDir: /usr/local/bin
     mountCNIConfDir: /etc/cni/net.d
     nonPrimaryCNI: true
@@ -27,6 +28,8 @@ spec:
     enableBindLocalIP: true
     enableDNSNameResolver: false
     enableExternalVPC: true
+    enableGwNftableLBSvc: false
+    enableGwNftableSvcClusterIP: false
     enableIC: false
     enableKeepVMIP: true
     enableLB: true
@@ -35,14 +38,16 @@ spec:
     enableNATGateway: true
     enableNP: true
     enableOVNIPSec: false
-    enableOVNLBPreferLocal: false
+    enableRecompute: false
     enableTProxy: false
     hardwareOffload: false
+    hostTunnelSrc: false
     logicalGateway: false
     lsCtSkipOstLportIPS: true
     lsDnatModDlDst: true
     npEnforcement: standard
     secureServing: false
+    setGeneveTxOff: false
     setVLANTxOff: false
     u2oFeatures:
       overlayOnlyRouting: false
@@ -55,7 +60,7 @@ spec:
   debug:
     mirrorInterface: mirror0
   dpdkCPU: "0"
-  dpdkImageTag: v1.16.4-dpdk
+  dpdkImageTag: v1.16.0-dpdk
   dpdkMEMORY: "0"
   dualStack:
     joinCIDR: fd00:100:64::/112
@@ -77,6 +82,20 @@ spec:
   hugePages: "0"
   hugepageSizeType: hugepages-2Mi
   imagePullPolicy: IfNotPresent
+  ipsec:
+    certManager:
+      enabled: false
+      issuerName: kube-ovn
+    certificateDuration: 63072000
+    priority: -5
+    requestTimeout: 300s
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 256Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
   ipv4:
     joinCIDR: 100.64.0.0/16
     pingerExternalAddress: 1.1.1.1
@@ -117,6 +136,7 @@ spec:
       ephemeralStorage: 1Gi
       memory: 1Gi
   kubeOvnMonitor:
+    replicas: 1
     requests:
       cpu: 200m
       ephemeralStorage: "0"
@@ -146,6 +166,11 @@ spec:
     enableEIPSNAT: true
     enableMetrics: true
     enableSSL: false
+    externalGatewayConfigNS: ""
+    externalGatewaySwitch: ""
+    gatewayNetfilterDetectTimeout: ""
+    gatewayNetfilterMode: ""
+    kubeProxyModeEndpoint: ""
     netStack: ipv4
     networkType: geneve
     nodeSubnet: join
@@ -248,4 +273,3 @@ spec:
   performance:
     gcInterval: 360
     inspectInterval: 20
-    ovsVSCtlConcurrency: 100

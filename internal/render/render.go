@@ -118,6 +118,7 @@ func generateObject(input string, valuesObj map[string]interface{}, object clien
 	if err != nil {
 		return nil, fmt.Errorf("error rending template: %v", err)
 	}
+
 	// object is skipped due to condition in the template
 	if strings.TrimSpace(output.String()) == "" {
 		return nil, nil
@@ -181,6 +182,10 @@ func InitialiseNewObject(object client.Object) client.Object {
 		return &corev1.PersistentVolumeClaim{}
 	case *admissionregistrationv1.ValidatingWebhookConfiguration:
 		return &admissionregistrationv1.ValidatingWebhookConfiguration{}
+	case *admissionregistrationv1.ValidatingAdmissionPolicy:
+		return &admissionregistrationv1.ValidatingAdmissionPolicy{}
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+		return &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
 	}
 
 	return nil
@@ -440,6 +445,9 @@ func generateIncludeValues(config *ovnoperatorv1.Configuration) map[string]inter
 		controllerReplicas = 2
 	}
 
+	renderDataPlane := config.Spec.InstallMode == "full" ||
+		config.Spec.InstallMode == "dataPlaneOnly"
+
 	return map[string]interface{}{
 		// Existing helper values.
 		"nodeCount": int64(len(config.Status.MatchingNodeAddresses)),
@@ -479,5 +487,7 @@ func generateIncludeValues(config *ovnoperatorv1.Configuration) map[string]inter
 
 		//ovn-controller replicas for dataPlaneOnly mode
 		"controllerReplicas": controllerReplicas,
+
+		"renderDataPlane": renderDataPlane,
 	}
 }

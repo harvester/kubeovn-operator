@@ -50,5 +50,28 @@ rules:
       - list
       - watch
 {{- end }}`
-	RoleList = []string{system_ovn_ipsec_role, system_ovn_central_role}
+
+	system_controller_sec_role = `
+{{- if include "kubeovn.renderDataPlane" . }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kube-ovn-controller-secrets
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [kube-ovn-tls, ovn-ipsec-ca, ovn-ipsec-signer]
+    verbs: [get, update]
+{{- if .Values.ipsec.certManager.enabled }}
+  - apiGroups: [cert-manager.io]
+    resources: [certificaterequests]
+    verbs: [get, list, watch, create]
+{{- end }}
+{{- end }}`
+
+	RoleList = []string{system_ovn_ipsec_role, system_ovn_central_role, system_controller_sec_role}
 )

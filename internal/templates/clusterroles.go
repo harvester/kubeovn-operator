@@ -8,6 +8,12 @@ metadata:
     rbac.authorization.k8s.io/system-only: "true"
   name: system:ovn
 rules:
+{{- if .Values.ipsec.certManager.enabled }}
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingadmissionpolicies, validatingadmissionpolicybindings]
+    resourceNames: [kube-ovn-ipsec-issuer]
+    verbs: [get]
+{{- end }}
   - apiGroups:
       - "kubeovn.io"
     resources:
@@ -15,6 +21,7 @@ rules:
       - vpcs/status
       - vpc-nat-gateways
       - vpc-nat-gateways/status
+      - vpc-nat-gateways/finalizers
       - vpc-egress-gateways
       - vpc-egress-gateways/status
       - subnets
@@ -48,6 +55,8 @@ rules:
       - ovn-dnat-rules/status
       - switch-lb-rules
       - switch-lb-rules/status
+      - router-lb-rules
+      - router-lb-rules/status
       - vpc-dnses
       - vpc-dnses/status
       - dnsnameresolvers
@@ -109,6 +118,14 @@ rules:
       - list
       - watch
   - apiGroups:
+      - networking.k8s.io
+    resources:
+      - servicecidrs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
       - ""
     resources:
       - configmaps
@@ -133,6 +150,7 @@ rules:
       - apps
     resources:
       - daemonsets
+      - replicasets
     verbs:
       - get
   - apiGroups:
@@ -146,6 +164,7 @@ rules:
       - watch
       - create
       - update
+      - patch
       - delete
   - apiGroups:
       - ""
@@ -193,9 +212,11 @@ rules:
     verbs:
       - get
       - list
+      - watch
       - create
       - delete
       - update
+      - patch
   - apiGroups:
       - ""
     resources:
@@ -258,21 +279,6 @@ rules:
     resources:
     - certificatesigningrequests/status
     - certificatesigningrequests/approval
-    verbs:
-    - update
-  - apiGroups:
-    - ""
-    resources:
-    - secrets
-    verbs:
-    - get
-    - create
-  - apiGroups:
-    - ""
-    resources:
-    - secrets
-    resourceNames:
-    - kube-ovn-tls
     verbs:
     - update
   - apiGroups:
@@ -408,8 +414,16 @@ rules:
       - "create"
       - "get"
       - "list"
-      - "watch"
-      - "delete"`
+      - "watch" 
+      - "delete" 
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - servicecidrs
+    verbs:
+      - get
+      - list
+      - watch`
 
 	system_kube_ovn_app_clusterrole = `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

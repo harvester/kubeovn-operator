@@ -226,7 +226,7 @@ spec:
                 - /kube-ovn/ovn-healthcheck.sh
             initialDelaySeconds: 30
             periodSeconds: 15
-            failureThreshold: 5
+            failureThreshold: 10
             timeoutSeconds: 45
       {{- $nodeSelector := index .Values "ovnCentral" "nodeSelector" }}
       {{- if $nodeSelector }}
@@ -281,7 +281,9 @@ spec:
   {{- end }}
   `
 
-	kube_ovn_controller_deployment = `kind: Deployment
+	kube_ovn_controller_deployment = `
+{{- if include "kubeovn.renderDataPlane" . }}
+kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: kube-ovn-controller
@@ -328,7 +330,7 @@ spec:
                   app: kube-ovn-controller
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
-      serviceAccountName: ovn
+      serviceAccountName: kube-ovn-controller
       automountServiceAccountToken: true
       hostNetwork: true
       securityContext:
@@ -424,6 +426,9 @@ spec:
           {{- if .Values.networking.externalGatewayConfigNS }}
           - --external-gateway-config-ns={{- .Values.networking.externalGatewayConfigNS }}
           {{- end }}
+           {{- if .Values.networking.externalGatewaySwitch }}
+          - --external-gateway-switch={{- .Values.networking.externalGatewaySwitch }}
+          {{- end }}
           - --enable-external-vpc={{- .Values.components.enableExternalVPC }}
           - --enable-ecmp={{- .Values.networking.enableECMP }}
           - --logtostderr=false
@@ -433,13 +438,14 @@ spec:
           - --log_file=/var/log/kube-ovn/kube-ovn-controller.log
           - --log_file_max_size=200
           - --enable-lb-svc={{- .Values.components.enableLBSVC }}
+          - --enable-gw-nftable-lb-svc={{- .Values.components.enableGwNftableLBSvc }}
+          - --enable-gw-nftable-svc-cluster-ip={{- .Values.components.enableGwNftableSvcClusterIP }}
           - --keep-vm-ip={{- .Values.components.enableKeepVMIP }}
           - --enable-metrics={{- .Values.networking.enableMetrics }}
-          {{ if .Values.networking.nodeLocalDNSIPS -}}
-          - --node-local-dns-ip={{- .Values.networking.nodeLocalDNSIPS }}
-          {{- end }}
           - --secure-serving={{- .Values.components.secureServing }}
           - --enable-ovn-ipsec={{- .Values.components.enableOVNIPSec }}
+          - --cert-manager-ipsec-cert={{ .Values.ipsec.certManager.enabled }}
+          - --cert-manager-issuer-name={{ .Values.ipsec.certManager.issuerName }}
           - --enable-anp={{- .Values.components.enableANP }}
           - --ovsdb-con-timeout={{- .Values.components.OVSDBConTimeout }}
           - --ovsdb-inactivity-timeout={{- .Values.components.OVSDBInactivityTimeout }}
@@ -453,7 +459,6 @@ spec:
           - --acl-sampling-allow-probability-percent={{- .Values.aclSamplingSpec.allowProbabilityPercent }}
           - --acl-sampling-default-deny-probability-percent={{- .Values.aclSamplingSpec.defaultDenyProbabilityPercent }}
           - --enable-live-migration-optimize={{- .Values.components.enableLiveMigrationOptimize }}
-          - --enable-ovn-lb-prefer-local={{- .Values.components.enableOVNLBPreferLocal }}
           - --image={{ .Values.global.registry.address }}/{{ .Values.global.images.kubeovn.repository }}:{{ .Values.global.images.kubeovn.tag }}
           - --skip-conntrack-dst-cidrs={{- .Values.networking.skipConnTrackDstCIDRs | default ""}}
           - --enable-dns-name-resolver={{- .Values.components.enableDNSNameResolver }}
@@ -478,6 +483,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
@@ -560,7 +569,8 @@ spec:
         - name: kube-ovn-tls
           secret:
             optional: true
-            secretName: kube-ovn-tls`
+            secretName: kube-ovn-tls
+{{- end }}`
 
 	ovn_ic_controller_deployment = `{{- if .Values.components.enableIC }}
 kind: Deployment
@@ -723,7 +733,7 @@ metadata:
     kubernetes.io/description: |
       Metrics for OVN components: northd, nb and sb.
 spec:
-  replicas: 1
+  replicas: {{ .Values.kubeOvnMonitor.replicas }}
   strategy:
     rollingUpdate:
       maxSurge: 1

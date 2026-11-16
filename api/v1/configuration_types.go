@@ -66,7 +66,7 @@ type ConfigurationSpec struct {
 	HugepageSizeType string `json:"hugepageSizeType,omitempty"`
 	// +kubebuilder:default:="1Gi"
 	HugePages resource.Quantity `json:"hugePages,omitempty"`
-	// +kubebuilder:default:="v1.16.4-dpdk"
+	// +kubebuilder:default:="v1.16.0-dpdk"
 	DPDKImageTag string `json:"dpdkImageTag,omitempty"`
 	// +kubebuilder:default:="1000m"
 	DPDKCPU resource.Quantity `json:"dpdkCPU,omitempty"`
@@ -82,8 +82,8 @@ type ConfigurationSpec struct {
 	KubeOVNCNI ResourceSpec `json:"kubeOvnCNI,omitempty"`
 	// +kubebuilder:default:={requests:{cpu:"100m",memory:"100Mi"},limits:{cpu:"200m",memory:"400Mi"}}
 	KubeOVNPinger ResourceSpec `json:"kubeOvnPinger,omitempty"`
-	// +kubebuilder:default:={requests:{cpu:"200m",memory:"200Mi"},limits:{cpu:"200m",memory:"200Mi"}}
-	KubeOVNMonitor ResourceSpec `json:"kubeOvnMonitor,omitempty"`
+	// +kubebuilder:default:={replicas:1,requests:{cpu:"200m",memory:"200Mi"},limits:{cpu:"200m",memory:"200Mi"}}
+	KubeOVNMonitor OVNMonitorResourceSpec `json:"kubeOvnMonitor,omitempty"`
 	// +kubebuilder:default:={}
 	ACLSamplingSpec ACLSamplingSpec `json:"aclSamplingSpec,omitempty"`
 	// +kubebuilder:default:="cluster"
@@ -102,6 +102,34 @@ type ConfigurationSpec struct {
 	ExternalOVNCentral ExternalOVNCentralSpec `json:"externalOvnCentral,omitempty"`
 
 	BGP BGPSpec `json:"bgp,omitempty"`
+
+	// Dedicated node IPsec container, rendered when the existing IPsec feature is enabled.
+	// +kubebuilder:default:={}
+	IPSec IPSecSpec `json:"ipsec,omitempty"`
+}
+
+type IPSecSpec struct {
+	// +kubebuilder:default:={}
+	CertManager IPSecCertManagerSpec `json:"certManager,omitempty"`
+	// CertificateDuration is in seconds.
+	// +kubebuilder:default:=63072000
+	// +kubebuilder:validation:Minimum=1
+	CertificateDuration int64 `json:"certificateDuration,omitempty"`
+	// RequestTimeout is a Go duration string (for example: "300s", "5m").
+	// +kubebuilder:default:="300s"
+	RequestTimeout string `json:"requestTimeout,omitempty"`
+	// Priority controls daemonset pod priority class value or scheduling preference.
+	// +kubebuilder:default:=-5
+	Priority int32 `json:"priority,omitempty"`
+	// +kubebuilder:default:={requests:{cpu:"10m",memory:"64Mi"},limits:{cpu:"1000m",memory:"256Mi"}}
+	Resources ResourceSpec `json:"resources,omitempty"`
+}
+
+type IPSecCertManagerSpec struct {
+	// +kubebuilder:default:=false
+	Enabled *bool `json:"enabled,omitempty"`
+	// +kubebuilder:default:="kube-ovn"
+	IssuerName string `json:"issuerName,omitempty"`
 }
 
 // BGPSpec defines the BGP speaker configuration.
@@ -241,6 +269,15 @@ type NetworkingSpec struct {
 	SkipConnTrackDstCIDRs string `json:"skipConnTrackDstCIDRs,omitempty"`
 	// +kubebuilder:default:=""
 	ExternalGatewayConfigNS string `json:"externalGatewayConfigNS,omitempty"`
+	//The name of the external gateway switch (OVS bridge providing external network).
+	// +kubebuilder:default:=""
+	ExternalGatewaySwitch string `json:"externalGatewaySwitch,omitempty"`
+	// +kubebuilder:default:=""
+	GatewayNetfilterMode string `json:"gatewayNetfilterMode,omitempty"`
+	// +kubebuilder:default:=""
+	KubeProxyModeEndpoint string `json:"kubeProxyModeEndpoint,omitempty"`
+	// +kubebuilder:default:=""
+	GatewayNetfilterDetectTimeout string `json:"gatewayNetfilterDetectTimeout,omitempty"`
 	// Minimum TLS version for OVN NB/SB database server and kube-ovn secure-serving endpoints.
 	// +kubebuilder:default:=""
 	TLSMinVersion string `json:"tlsMinVersion,omitempty"`
@@ -275,6 +312,10 @@ type ComponentSpec struct {
 	HardwareOffload *bool `json:"hardwareOffload,omitempty"`
 	// +kubebuilder:default:=false
 	EnableLBSVC *bool `json:"enableLBSVC,omitempty"`
+	// +kubebuilder:default:=false
+	EnableGwNftableLBSvc *bool `json:"enableGwNftableLBSvc,omitempty"`
+	// +kubebuilder:default:=false
+	EnableGwNftableSvcClusterIP *bool `json:"enableGwNftableSvcClusterIP,omitempty"`
 	// +kubebuilder:default:=true
 	EnableKeepVMIP *bool `json:"enableKeepVMIP,omitempty"`
 	// +kubebuilder:default:=true
@@ -295,6 +336,8 @@ type ComponentSpec struct {
 	// +kubebuilder:default:=false
 	EnableTProxy *bool `json:"enableTProxy,omitempty"`
 	// +kubebuilder:default:=false
+	EnableRecompute *bool `json:"enableRecompute,omitempty"`
+	// +kubebuilder:default:=false
 	EnableIC *bool `json:"enableIC,omitempty"`
 	// +kubebuilder:default:=true
 	EnableNATGateway *bool `json:"enableNATGateway,omitempty"`
@@ -303,7 +346,11 @@ type ComponentSpec struct {
 	// +kubebuilder:default:=false
 	EnableANP *bool `json:"enableANP,omitempty"`
 	// +kubebuilder:default:=false
+	SetGeneveTxOff *bool `json:"setGeneveTxOff,omitempty"`
+	// +kubebuilder:default:=false
 	SetVLANTxOff *bool `json:"setVLANTxOff,omitempty"`
+	// +kubebuilder:default:=false
+	HostTunnelSrc *bool `json:"hostTunnelSrc,omitempty"`
 	// +kubebuilder:default:=3
 	// +kubebuilder:validation:Minimum=1
 	OVSDBConTimeout int `json:"OVSDBConTimeout,omitempty"`
@@ -316,8 +363,6 @@ type ComponentSpec struct {
 	NPEnforcement string `json:"npEnforcement,omitempty"`
 	// +kubebuilder:default:=false
 	EnableDNSNameResolver *bool `json:"enableDNSNameResolver,omitempty"`
-	// +kubebuilder:default:=false
-	EnableOVNLBPreferLocal *bool `json:"enableOVNLBPreferLocal,omitempty"`
 }
 
 type U2OFeatures struct {
@@ -347,9 +392,6 @@ type PerformanceSpec struct {
 	// +kubebuilder:default:=20
 	// +kubebuilder:validation:Minimum=1
 	InspectInterval int `json:"inspectInterval,omitempty"`
-	// +kubebuilder:default:=100
-	// +kubebuilder:validation:Minimum=0
-	OVSVSCtlConcurrency int `json:"ovsVSCtlConcurrency,omitempty"`
 }
 
 type DebugSpec struct {
@@ -361,6 +403,8 @@ type DebugSpec struct {
 type CNIConfSpec struct {
 	// +kubebuilder:default:="01"
 	CNIConfigPriority string `json:"cniConfigPriority,omitempty"`
+	// +kubebuilder:default:=true
+	InstallCNIPlugins *bool `json:"installCNIPlugins,omitempty"`
 	// +kubebuilder:default:="/etc/cni/net.d"
 	CNIConfigDir string `json:"cniConfigDir,omitempty"`
 	// +kubebuilder:default:="/etc/cni/net.d"
@@ -405,6 +449,15 @@ type OVNCentralResourceSpec struct {
 	Storage OVNCentralStorageSpec `json:"storage,omitempty"`
 	// +kubebuilder:default:={}
 	Service OVNCentralServiceSpec `json:"service,omitempty"`
+}
+
+type OVNMonitorResourceSpec struct {
+	// +kubebuilder:default:=1
+	Replicas int `json:"replicas"`
+	// +kubebuilder:default:={cpu:"200m",memory:"200Mi"}
+	Requests CPUMemSpec `json:"requests,omitempty"`
+	// +kubebuilder:default:={cpu:2, memory:"1000Mi", ephemeralStorage:"1Gi"}
+	Limits CPUMemSpec `json:"limits,omitempty"`
 }
 
 type OVNControllerResourceSpec struct {

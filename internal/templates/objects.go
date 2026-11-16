@@ -22,5 +22,7 @@ var OrderedObjectList = map[client.Object][]string{
 	&appsv1.DaemonSet{}:             DaemonsetList,
 	&corev1.Service{}:               ServicesList,
 	&corev1.PersistentVolumeClaim{}: PersistentVolumeClaimList,
-	&admissionregistrationv1.ValidatingWebhookConfiguration{}: ValidatingWebhookConfigurationList,
+	&admissionregistrationv1.ValidatingWebhookConfiguration{}:   ValidatingWebhookConfigurationList,
+	&admissionregistrationv1.ValidatingAdmissionPolicy{}:        ValidatingAdmissionPoliciesList,
+	&admissionregistrationv1.ValidatingAdmissionPolicyBinding{}: ValidatingAdmissionPolicyBindingsList,
 }
