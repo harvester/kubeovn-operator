@@ -77,7 +77,7 @@ spec:
               topologyKey: kubernetes.io/hostname
         {{- end }}
         {{- if not (index .Values "ovnCentral" "hcp" "enabled") }}
-        {{- include "kubeovn.masterNodeAffinity" . | nindent 8 }}
+        {{- include "kubeovn.ovnCentralNodeAffinity" . | nindent 8 }}
         {{- end }}
       priorityClassName: system-cluster-critical
       serviceAccountName: {{ ternary "ovn-central" "ovn-ovs" (index .Values "ovnCentral" "hcp" "enabled") }}

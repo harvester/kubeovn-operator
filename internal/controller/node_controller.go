@@ -101,8 +101,10 @@ func (r *NodeReconciler) reconcileNodeDeletion(ctx context.Context, config *kube
 		r.Log.Error(errors.New("node has no internal ip so requeuing, manual cleanup of finalizer may be needed"), "node", node.GetName())
 		return ctrl.Result{}, fmt.Errorf("node has no internal ip so ignoring %s", node.GetName())
 	}
-	if slices.Contains(config.Status.MatchingNodeAddresses, nodeIP) {
-		r.Log.WithValues("name", node.Name).Info("node matches master node label, trigger nb/sb db cleanup")
+	// a node may host an ovn-central raft member (status.ovnCentralNodeAddresses) without matching
+	// the master node label when spec.ovnCentral.nodesLabel is set, so check both sets
+	if slices.Contains(config.Status.MatchingNodeAddresses, nodeIP) || slices.Contains(config.Status.OVNCentralNodeAddresses, nodeIP) {
+		r.Log.WithValues("name", node.Name).Info("node matches master / ovn-central node label, trigger nb/sb db cleanup")
 		if err := r.reconcileOVNCentralState(ctx, nodeIP); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -110,6 +112,7 @@ func (r *NodeReconciler) reconcileNodeDeletion(ctx context.Context, config *kube
 		// this will result in regeneration of templates
 		configObj := config.DeepCopy()
 		config.Status.MatchingNodeAddresses = removeElement(config.Status.MatchingNodeAddresses, nodeIP)
+		config.Status.OVNCentralNodeAddresses = removeElement(config.Status.OVNCentralNodeAddresses, nodeIP)
 		if err := r.Client.Status().Patch(ctx, config, client.MergeFrom(configObj)); err != nil {
 			return ctrl.Result{}, err
 		}
