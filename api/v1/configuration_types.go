@@ -66,7 +66,7 @@ type ConfigurationSpec struct {
 	HugepageSizeType string `json:"hugepageSizeType,omitempty"`
 	// +kubebuilder:default:="1Gi"
 	HugePages resource.Quantity `json:"hugePages,omitempty"`
-	// +kubebuilder:default:="v1.16.0-dpdk"
+	// +kubebuilder:default:="v1.17.0-dpdk"
 	DPDKImageTag string `json:"dpdkImageTag,omitempty"`
 	// +kubebuilder:default:="1000m"
 	DPDKCPU resource.Quantity `json:"dpdkCPU,omitempty"`

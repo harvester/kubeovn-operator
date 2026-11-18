@@ -60,7 +60,7 @@ spec:
   debug:
     mirrorInterface: mirror0
   dpdkCPU: "0"
-  dpdkImageTag: v1.16.0-dpdk
+  dpdkImageTag: v1.17.0-dpdk
   dpdkMEMORY: "0"
   dualStack:
     joinCIDR: fd00:100:64::/112
