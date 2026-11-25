@@ -179,7 +179,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIPs
             - name: ENABLE_BIND_LOCAL_IP
-              value: "{{ ternary false .Values.func.ENABLE_BIND_LOCAL_IP (index .Values "ovnCentral" "hcp" "enabled") }}"
+              value: "{{ ternary false .Values.components.enableBindLocalIP (index .Values "ovnCentral" "hcp" "enabled") }}"
             - name: PROBE_INTERVAL
               value: "{{ .Values.networking.probeInterval }}"
             - name: OVN_NORTHD_PROBE_INTERVAL

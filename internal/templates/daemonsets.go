@@ -392,8 +392,7 @@ spec:
           - --acl-sampling-set-id={{- .Values.aclSamplingSpec.setID }}
           - --acl-sampling-local-group-id={{- .Values.aclSamplingSpec.localGroupID }}
         securityContext:
-          runAsGroup: {{ include "kubeovn.runAsUser" . }}
-          runAsUser: {{ include "kubeovn.runAsUser" . }}
+          runAsUser: 0
           privileged: false
           allowPrivilegeEscalation: true
           capabilities:
