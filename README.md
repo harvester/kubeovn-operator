@@ -161,6 +161,39 @@ spec:
     ovsVSCtlConcurrency: 100
 ```
 
+#### ovn-central raft members
+
+By default the ovn-central NB/SB raft members run on the nodes matching `masterNodesLabel`. A raft cluster
+needs an odd number of members to tolerate a failure: with 2 members, losing one leaves the survivor unable
+to elect a leader. `ovnCentral.nodesLabel` (key=value or key) selects the nodes hosting the raft members
+independently of `masterNodesLabel`. For example, on a Harvester cluster with 2 control-plane nodes and 1 witness node:
+
+```yaml
+spec:
+  masterNodesLabel: node-role.kubernetes.io/control-plane=true
+  ovnCentral:
+    nodesLabel: node-role.kubernetes.io/etcd=true
+    # the Harvester witness node is tainted node-role.kubernetes.io/etcd=true:NoExecute;
+    # ovn-central only gets the tolerations listed here
+    tolerations:
+      - key: node-role.kubernetes.io/etcd
+        operator: Equal
+        value: "true"
+        effect: NoExecute
+```
+
+If any selected node is tainted, add a matching entry to `ovnCentral.tolerations`, or that raft member stays
+`Pending`. Only enable or widen `nodesLabel` while the existing raft cluster has a leader
+(`ovn-appctl -t /var/run/ovn/ovnnb_db.ctl cluster/status OVN_Northbound`); a new member can't join a cluster
+that has lost quorum.
+
+Only the ovn-central deployment (placement, replica count and `NODE_IPS`) and the OVN DB addresses used by
+OVN clients (`OVN_DB_IPS` of kube-ovn-controller, ovn-ic-controller, ovs-ovn and ovs-ovn-dpdk) follow this label.
+kube-ovn-controller replicas and the other control-plane components keep using `masterNodesLabel`. The matching
+node addresses are reported in `status.ovnCentralNodeAddresses`. The field is ignored when `ovnCentral.hcp.enabled`
+is true or `ovnCentralMode` is `single`. Changing it rolls ovn-central and every OVN client, including the
+ovs-ovn daemonset.
+
 The operator has 3 main reconcile loops:
 * configuration controller: generates kubeovn objects from the [templates](./internal/templates/) and reconciles their eventual state against the generated state.
 * healthcheck controller: reconciles ovn nb/sb databases from the cluster and updates the results in appropriate `configuration` status conditions
